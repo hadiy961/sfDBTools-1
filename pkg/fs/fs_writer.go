@@ -1,0 +1,35 @@
+package fs
+
+import (
+	"os"
+)
+
+// WriteFile menulis data ke file di path yang diberikan dengan permission 0600.
+func WriteFile(filePath string, data []byte) error {
+	return os.WriteFile(filePath, data, 0600)
+}
+
+// ReadDirFiles membaca nama-nama file dalam direktori yang diberikan.
+func ReadDirFiles(dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	var files []string
+	for _, e := range entries {
+		if !e.IsDir() {
+			files = append(files, e.Name())
+		}
+	}
+	return files, nil
+}
+
+// ReadFile membaca isi file dari path yang diberikan.
+func ReadFile(path string) ([]byte, error) {
+	return os.ReadFile(path)
+}
+
+// RemoveFile menghapus file di path yang diberikan.
+func RemoveFile(path string) error {
+	return os.Remove(path)
+}
