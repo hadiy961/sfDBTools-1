@@ -1,3 +1,8 @@
+// File : cmd/dbconfig_cmd/dbconfig_validate_cmd.go
+// Deskripsi : Perintah 'validate' untuk memvalidasi file konfigurasi database yang sudah ada
+// Author : Hadiyatna Muflihun
+// Tanggal : 2024-10-03
+// Last Modified : 2024-10-03
 package dbconfig_cmd
 
 import (
