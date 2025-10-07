@@ -1,3 +1,8 @@
+// File : internal/dbconfig/dbconfig_create.go
+// Deskripsi : Logika untuk pembuatan file konfigurasi database
+// Author : Hadiyatna Muflihun
+// Tanggal : 2024-10-03
+// Last Modified : 2024-10-03
 package dbconfig
 
 import (

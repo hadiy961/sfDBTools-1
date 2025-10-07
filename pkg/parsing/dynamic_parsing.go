@@ -1,3 +1,8 @@
+// File : pkg/parsing/dynamic_parsing.go
+// Deskripsi : Fungsi utilitas untuk parsing flags Cobra secara dinamis dari struct menggunakan reflection
+// Author : Hadiyatna Muflihun
+// Tanggal : 2024-10-03
+// Last Modified : 2024-10-03
 package parsing
 
 import (

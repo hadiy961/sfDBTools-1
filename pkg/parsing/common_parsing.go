@@ -1,3 +1,8 @@
+// File : pkg/parsing/common_parsing.go
+// Deskripsi : Fungsi utilitas untuk parsing konfigurasi database dari format INI
+// Author : Hadiyatna Muflihun
+// Tanggal : 2024-10-03
+// Last Modified : 2024-10-03
 package parsing
 
 import "strings"

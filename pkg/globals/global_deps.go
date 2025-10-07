@@ -1,3 +1,9 @@
+// File : pkg/globals/global_deps.go
+// Deskripsi : Definisi struct untuk menyimpan dependensi global aplikasi
+// Author : Hadiyatna Muflihun
+// Tanggal : 2024-10-03
+// Last Modified : 2024-10-03
+
 package globals
 
 // Kita harus mendefinisikan tipe data di sini untuk menghindari import cycle

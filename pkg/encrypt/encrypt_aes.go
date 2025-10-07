@@ -1,3 +1,8 @@
+// File : pkg/encrypt/encrypt_aes.go
+// Deskripsi : Fungsi utilitas untuk enkripsi dan dekripsi AES kompatibel dengan openssl enc -pbkdf2
+// Author : Hadiyatna Muflihun
+// Tanggal : 2024-10-03
+// Last Modified : 2024-10-03
 package encrypt
 
 import (

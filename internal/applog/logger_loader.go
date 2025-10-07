@@ -1,3 +1,8 @@
+// File : internal/applog/logger_loader.go
+// Deskripsi : Fungsi untuk memuat dan menginisialisasi logger aplikasi
+// Author : Hadiyatna Muflihun
+// Tanggal : 2024-10-03
+// Last Modified : 2024-10-03
 package applog
 
 import (
@@ -99,19 +104,22 @@ func NewLogger() Logger {
 	// A. Output ke File (Rotasi)
 	if cfg.Output.File.Enabled {
 		fileCfg := cfg.Output.File
-
+		// Pastikan direktori ada
 		if _, err := os.Stat(fileCfg.Dir); os.IsNotExist(err) {
 			os.MkdirAll(fileCfg.Dir, 0755)
 		}
 
+		// Tentukan nama file dengan pola dan tanggal jika perlu
 		logFilename := fileCfg.FilenamePattern
 		if fileCfg.Rotation.Daily {
 			logFilename = strings.Replace(logFilename, "{date}", time.Now().Format("2006-01-02"), 1)
 		}
 		logFilePath := filepath.Join(fileCfg.Dir, logFilename)
 
+		// Konversi MaxSize dari string ke int (dalam MB)
 		maxSizeMB := parseMaxSize(fileCfg.Rotation.MaxSize)
 
+		// Gunakan lumberjack untuk rotasi file log
 		fileRotator := &lumberjack.Logger{
 			Filename:   logFilePath,
 			MaxSize:    maxSizeMB,
@@ -213,11 +221,13 @@ type TimezoneHook struct {
 	Location *time.Location
 }
 
+// Fire mengubah zona waktu entri log
 func (hook *TimezoneHook) Fire(entry *logrus.Entry) error {
 	entry.Time = entry.Time.In(hook.Location)
 	return nil
 }
 
+// Levels mengembalikan semua level
 func (hook *TimezoneHook) Levels() []logrus.Level {
 	return logrus.AllLevels
 }

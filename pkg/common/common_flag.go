@@ -1,3 +1,8 @@
+// File : pkg/common/common_flag.go
+// Deskripsi : Fungsi utilitas untuk mengambil nilai flag dengan fallback ke environment variable
+// Author : Hadiyatna Muflihun
+// Tanggal : 2024-10-03
+// Last Modified : 2024-10-03
 package common
 
 import (

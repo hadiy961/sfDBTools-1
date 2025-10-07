@@ -1,3 +1,8 @@
+// File : pkg/common/common_helper.go
+// Deskripsi : Fungsi utilitas umum yang digunakan di berbagai bagian aplikasi
+// Author : Hadiyatna Muflihun
+// Tanggal : 2024-10-03
+// Last Modified : 2024-10-03
 package common
 
 import (

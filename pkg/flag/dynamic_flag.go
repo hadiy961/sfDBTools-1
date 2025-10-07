@@ -1,3 +1,8 @@
+// File : pkg/flag/dynamic_flag.go
+// Deskripsi : Fungsi utilitas untuk mendaftarkan flags Cobra secara dinamis dari struct menggunakan reflection
+// Author : Hadiyatna Muflihun
+// Tanggal : 2024-10-03
+// Last Modified : 2024-10-03
 package flags
 
 import (

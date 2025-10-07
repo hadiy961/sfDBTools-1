@@ -1,3 +1,8 @@
+// File : pkg/ui/ui_formatting.go
+// Deskripsi : Fungsi utilitas untuk output format di terminal
+// Author : Hadiyatna Muflihun
+// Tanggal : 2024-10-03
+// Last Modified : 2024-10-03
 package ui
 
 import (

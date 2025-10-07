@@ -1,3 +1,8 @@
+// File : internal/dbconfig/dbconfig_prompt.go
+// Deskripsi : Logika untuk prompt input user pada modul dbconfig
+// Author : Hadiyatna Muflihun
+// Tanggal : 2024-10-03
+// Last Modified : 2024-10-03
 package dbconfig
 
 import (

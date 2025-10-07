@@ -1,3 +1,8 @@
+// File : pkg/fs/fs_validator.go
+// Deskripsi : Fungsi utilitas untuk operasi filesystem
+// Author : Hadiyatna Muflihun
+// Tanggal : 2024-10-03
+// Last Modified : 2024-10-03
 package fs
 
 import (

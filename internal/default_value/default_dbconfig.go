@@ -1,3 +1,8 @@
+// File : internal/default_value/default_dbconfig.go
+// Deskripsi : Nilai default untuk flags pada modul dbconfig
+// Author : Hadiyatna Muflihun
+// Tanggal : 2024-10-03
+// Last Modified : 2024-10-03
 package defaultvalue
 
 import (

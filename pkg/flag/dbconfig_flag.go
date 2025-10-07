@@ -1,3 +1,9 @@
+// File : pkg/flag/dbconfig_flag.go
+// Deskripsi : Fungsi utilitas untuk mendaftarkan flags pada perintah dbconfig
+// Author : Hadiyatna Muflihun
+// Tanggal : 2024-10-03
+// Last Modified : 2024-10-03
+
 package flags
 
 import (

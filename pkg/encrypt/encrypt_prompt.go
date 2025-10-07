@@ -1,3 +1,9 @@
+// File : pkg/encrypt/encrypt_prompt.go
+// Deskripsi : Fungsi utilitas untuk prompt input user pada modul enkripsi
+// Author : Hadiyatna Muflihun
+// Tanggal : 2024-10-03
+// Last Modified : 2024-10-03
+
 package encrypt
 
 import (

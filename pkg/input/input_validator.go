@@ -1,3 +1,8 @@
+// File : pkg/input/input_validator.go
+// Deskripsi : Fungsi utilitas untuk validasi input user
+// Author : Hadiyatna Muflihun
+// Tanggal : 2024-10-03
+// Last Modified : 2024-10-03
 package input
 
 import (

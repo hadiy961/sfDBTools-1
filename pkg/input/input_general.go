@@ -1,3 +1,8 @@
+// File : pkg/input/input_general.go
+// Deskripsi : Fungsi utilitas untuk input interaktif dari user
+// Author : Hadiyatna Muflihun
+// Tanggal : 2024-10-03
+// Last Modified : 2024-10-03
 package input
 
 import (

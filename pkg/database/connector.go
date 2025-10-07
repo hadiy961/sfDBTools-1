@@ -1,3 +1,8 @@
+// File : pkg/database/connector.go
+// Deskripsi : Fungsi utilitas untuk koneksi database
+// Author : Hadiyatna Muflihun
+// Tanggal : 2024-10-03
+// Last Modified : 2024-10-03
 package database
 
 import (

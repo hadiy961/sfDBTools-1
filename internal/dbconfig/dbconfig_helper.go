@@ -1,3 +1,9 @@
+// File : internal/dbconfig/dbconfig_helper.go
+// Deskripsi : Helper functions untuk modul dbconfig
+// Author : Hadiyatna Muflihun
+// Tanggal : 2024-10-03
+// Last Modified : 2024-10-03
+
 package dbconfig
 
 import (

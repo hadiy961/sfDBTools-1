@@ -1,3 +1,8 @@
+// File : pkg/ui/ui_terminal.go
+// Deskripsi : Fungsi utilitas untuk operasi terminal seperti mendapatkan ukuran terminal, mencetak border, dll.
+// Author : Hadiyatna Muflihun
+// Tanggal : 2024-10-03
+// Last Modified : 2024-10-03
 package ui
 
 import (

@@ -1,3 +1,8 @@
+// File : internal/dbconfig/dbconfig_wizard.go
+// Deskripsi : Logika untuk wizard interaktif pembuatan dan pengeditan file konfigurasi database
+// Author : Hadiyatna Muflihun
+// Tanggal : 2024-10-03
+// Last Modified : 2024-10-03
 package dbconfig
 
 import (

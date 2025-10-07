@@ -1,3 +1,8 @@
+// File : pkg/ui/ui_spinner.go
+// Deskripsi : Fungsi utilitas untuk menampilkan spinner di terminal selama operasi berlangsung
+// Author : Hadiyatna Muflihun
+// Tanggal : 2024-10-03
+// Last Modified : 2024-10-03
 package ui
 
 import (

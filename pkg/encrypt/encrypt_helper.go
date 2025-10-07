@@ -1,3 +1,8 @@
+// File : pkg/encrypt/encrypt_helper.go
+// Deskripsi : Fungsi utilitas untuk membantu enkripsi dan dekripsi konfigurasi database
+// Author : Hadiyatna Muflihun
+// Tanggal : 2024-10-03
+// Last Modified : 2024-10-03
 package encrypt
 
 import (

@@ -1,3 +1,9 @@
+// File : internal/dbconfig/dbconfig_display.go
+// Deskripsi : Logika untuk menampilkan detail file konfigurasi database
+// Author : Hadiyatna Muflihun
+// Tanggal : 2024-10-03
+// Last Modified : 2024-10-03
+
 package dbconfig
 
 import (

@@ -1,3 +1,8 @@
+// File : internal/structs/structs_connection.go
+// Deskripsi : Structs untuk koneksi database
+// Author : Hadiyatna Muflihun
+// Tanggal : 2024-10-03
+// Last Modified : 2024-10-03
 package structs
 
 // ServerDBConnection - Database connection related flags

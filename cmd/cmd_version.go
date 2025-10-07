@@ -1,3 +1,8 @@
+// File : cmd/cmd_version.go
+// Deskripsi : Sub-command untuk menampilkan versi aplikasi
+// Author : Hadiyatna Muflihun
+// Tanggal : 2024-10-03
+// Last Modified : 2024-10-03
 package cmd
 
 import (
@@ -7,7 +12,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// versionCmd adalah sub-command untuk menampilkan versi aplikasi
 // versionCmd adalah sub-command untuk menampilkan versi aplikasi
 var versionCmd = &cobra.Command{
 	Use:   "version",

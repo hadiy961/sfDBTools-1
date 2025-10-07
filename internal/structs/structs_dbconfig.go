@@ -1,3 +1,8 @@
+// File : internal/structs/structs_dbconfig.go
+// Deskripsi : Structs untuk konfigurasi database
+// Author : Hadiyatna Muflihun
+// Tanggal : 2024-10-03
+// Last Modified : 2024-10-03
 package structs
 
 import "time"

@@ -1,3 +1,8 @@
+// File : pkg/parsing/dbconfig_parsing.go
+// Deskripsi : Fungsi utilitas untuk parsing flags perintah dbconfig
+// Author : Hadiyatna Muflihun
+// Tanggal : 2024-10-03
+// Last Modified : 2024-10-03
 package parsing
 
 import (
