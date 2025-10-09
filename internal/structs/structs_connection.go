@@ -13,6 +13,12 @@ type ServerDBConnection struct {
 	Password string `flag:"password" env:"SFDB_DB_PASSWORD" default:""`
 }
 
+// SourceDBConnection - Database source connection related flags
+type SourceDBConnection struct {
+	ServerDBConnection
+	Database string `flag:"source-database" env:"SFDB_SOURCE_DB_NAME" default:"sourcedb"`
+}
+
 // DBConnection - Database connection related flags
 type DBConnection struct {
 	ServerDBConnection ServerDBConnection

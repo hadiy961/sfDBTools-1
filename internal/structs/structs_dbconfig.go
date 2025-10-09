@@ -21,7 +21,7 @@ type DBConfigInfo struct {
 	FileSize           string
 	LastModified       time.Time
 	IsValid            bool
-	FilePath           string
+	FilePath           string `flag:"config" env:"SFDB_CONFIG_FILE" default:""`
 }
 
 // DBConfigEditFlags - Flags for dbconfig edit command
