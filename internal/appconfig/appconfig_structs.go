@@ -20,16 +20,29 @@ type Config struct {
 type BackupConfig struct {
 	Compression   CompressionConfig  `yaml:"compression"`
 	MysqlDumpArgs string             `yaml:"mysqldump_args"`
+	Exclude       ExcludeConfig      `yaml:"exclude"`
+	DBList        DBListConfig       `yaml:"db_list"`
 	Retention     RetentionConfig    `yaml:"retention"`
-	Security      SecurityConfig     `yaml:"security"`
+	Encryption    EncryptionConfig   `yaml:"encryption"`
 	Output        OutputConfig       `yaml:"output"`
 	Verification  VerificationConfig `yaml:"verification"`
 }
 
 type CompressionConfig struct {
-	Algorithm string `yaml:"algorithm"`
-	Level     string `yaml:"level"`
-	Required  bool   `yaml:"required"`
+	Type     string `yaml:"type"`
+	Level    string `yaml:"level"`
+	Required bool   `yaml:"required"`
+}
+
+type DBListConfig struct {
+	File string `yaml:"file"`
+}
+
+type ExcludeConfig struct {
+	Databases       []string `yaml:"databases"`
+	User            bool     `yaml:"user"`
+	SystemDatabases bool     `yaml:"system_databases"`
+	Data            bool     `yaml:"data"`
 }
 
 type RetentionConfig struct {
@@ -38,10 +51,9 @@ type RetentionConfig struct {
 	Days            int    `yaml:"days"`
 }
 
-type SecurityConfig struct {
-	ChecksumVerification bool `yaml:"checksum_verification"`
-	EncryptionRequired   bool `yaml:"encryption_required"`
-	IntegrityCheck       bool `yaml:"integrity_check"`
+type EncryptionConfig struct {
+	Enabled bool   `yaml:"enabled"`
+	Key     string `yaml:"key"`
 }
 
 type OutputConfig struct {
@@ -56,14 +68,15 @@ type OutputConfig struct {
 		CreateSubdirs bool   `yaml:"create_subdirs"`
 		Pattern       string `yaml:"pattern"`
 	} `yaml:"structure"`
-	TempDirectory string `yaml:"temp_directory"`
+	TempDirectory    string `yaml:"temp_directory"`
+	CaptureGtid      bool   `yaml:"capture_gtid"`
+	CreateBackupInfo bool   `yaml:"create_backup_info"`
 }
 
 type VerificationConfig struct {
-	CompareChecksums bool   `yaml:"compare_checksums"`
-	DiskSpaceCheck   bool   `yaml:"disk_space_check"`
-	MinimumFreeSpace string `yaml:"minimum_free_space"`
-	VerifyAfterWrite bool   `yaml:"verify_after_write"`
+	CompareChecksums bool `yaml:"compare_checksums"`
+	DiskSpaceCheck   bool `yaml:"disk_space_check"`
+	VerifyAfterWrite bool `yaml:"verify_after_write"`
 }
 
 // Struct untuk bagian 'config_dir'
