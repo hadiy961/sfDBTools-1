@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"sfDBTools/internal/appconfig"
 	app_log "sfDBTools/internal/applog"
+	"strings"
 )
 
 // ClearScreen clears the terminal screen using platform-specific commands
@@ -80,4 +81,12 @@ func Headers(title string) {
 	}
 
 	ClearAndShowHeader(cfg.General.AppName + " v" + cfg.General.Version + " - " + title)
+}
+
+// FormatStringSlice converts a slice of strings into a comma-separated string
+func FormatStringSlice(slice []string) string {
+	if len(slice) == 0 {
+		return "None"
+	}
+	return strings.Join(slice, ", ")
 }

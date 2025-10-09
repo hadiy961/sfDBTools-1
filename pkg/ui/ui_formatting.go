@@ -48,7 +48,7 @@ func PrintSuccess(message string) {
 
 // PrintWarning prints warning message in yellow
 func PrintWarning(message string) {
-	PrintColoredLine("⚠️ "+message, ColorYellow)
+	PrintColoredLine(message, ColorYellow)
 }
 
 // PrintInfo prints info message in blue
