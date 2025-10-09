@@ -1,19 +1,26 @@
 backup:
     compression:
-        algorithm: gzip
+        type: gzip
         level: best
         required: true
+    encryption:
+        enabled: true
+    exclude:
+        databases:
+        user: false
+        system_databases: true
+        data: false
+    db_list:
+        file: /etc/sfDBTools/config/db_list1.txt
     mysqldump_args: -CfQq --max-allowed-packet=1G --hex-blob --order-by-primary --single-transaction --routines=true --triggers=true --opt
     retention:
         cleanup_enabled: true
         cleanup_schedule: daily
         days: 1
-    security:
-        checksum_verification: true
-        encryption_required: true
-        integrity_check: true
     output:
         base_directory: /mnt/nfs/backup
+        capture_gtid: true
+        create_backup_info: true
         cleanup_temp: true
         naming:
             include_client_code: true
@@ -26,7 +33,6 @@ backup:
     verification:
         compare_checksums: true
         disk_space_check: true
-        minimum_free_space: auto
         verify_after_write: true
 config_dir:
     database_config: /etc/sfDBTools/config/db_config

@@ -7,6 +7,9 @@ package common
 
 import (
 	"errors"
+	"fmt"
+	"path/filepath"
+	"sfDBTools/internal/appconfig"
 	"strings"
 
 	"github.com/AlecAivazis/survey/v2/terminal"
@@ -36,4 +39,27 @@ func HandleInputError(err error) error {
 // common.TrimConfigSuffix menghapus suffix .cnf.enc dari nama jika ada.
 func TrimConfigSuffix(name string) string {
 	return strings.TrimSuffix(strings.TrimSuffix(name, ".enc"), ".cnf")
+}
+
+// ResolveConfigPath mengubah name/path menjadi absolute path di config dir dan nama normalized tanpa suffix
+func ResolveConfigPath(spec string) (string, string, error) {
+	if strings.TrimSpace(spec) == "" {
+		return "", "", fmt.Errorf("nama atau path file konfigurasi kosong")
+	}
+	cfg, err := appconfig.LoadConfigFromEnv()
+	if err != nil {
+		return "", "", fmt.Errorf("gagal memuat konfigurasi aplikasi: %w", err)
+	}
+	cfgDir := cfg.ConfigDir.DatabaseConfig
+	var absPath string
+	if filepath.IsAbs(spec) {
+		absPath = spec
+	} else {
+		absPath = filepath.Join(cfgDir, spec)
+	}
+	absPath = EnsureConfigExt(absPath)
+
+	// Nama normalized
+	name := TrimConfigSuffix(filepath.Base(absPath))
+	return absPath, name, nil
 }

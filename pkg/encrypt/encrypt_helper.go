@@ -24,7 +24,6 @@ import (
 func LoadAndParseConfig(absPath string, key string) (*structs.DBConfigInfo, error) {
 	// Ambil kunci enkripsi dari argumen, jika kosong minta dari user
 	// Gunakan nilai default dari structs.DBConfigInfo jika ada
-	EncryptionKey := structs.DBConfigInfo{}.EncryptionKey
 	// Baca file
 	data, err := fs.ReadFile(absPath)
 	if err != nil {
@@ -37,7 +36,7 @@ func LoadAndParseConfig(absPath string, key string) (*structs.DBConfigInfo, erro
 	if k == "" {
 		var src string
 		// Jika kunci tidak diberikan, minta dari env atau prompt
-		k, src, err = ResolveEncryptionKey(EncryptionKey)
+		k, src, err = ResolveEncryptionKey(key)
 		_ = src // source tidak digunakan di sini
 		if err != nil {
 			return nil, fmt.Errorf("kunci enkripsi tidak tersedia: %w", err)
