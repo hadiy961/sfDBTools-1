@@ -32,25 +32,6 @@ func (s *Service) filePathInConfigDir(name string) string {
 	return filepath.Join(cfgDir, buildFileName(name))
 }
 
-// resolveConfigPath mengubah name/path menjadi absolute path di config dir dan nama normalized tanpa suffix
-func (s *Service) resolveConfigPath(spec string) (string, string, error) {
-	if strings.TrimSpace(spec) == "" {
-		return "", "", fmt.Errorf("nama atau path file konfigurasi kosong")
-	}
-	cfgDir := s.Config.ConfigDir.DatabaseConfig
-	var absPath string
-	if filepath.IsAbs(spec) {
-		absPath = spec
-	} else {
-		absPath = filepath.Join(cfgDir, spec)
-	}
-	absPath = common.EnsureConfigExt(absPath)
-
-	// Nama normalized
-	name := common.TrimConfigSuffix(filepath.Base(absPath))
-	return absPath, name, nil
-}
-
 // loadSnapshotFromPath membaca file terenkripsi, mencoba dekripsi (jika kunci tersedia/di-prompt),
 // parse nilai penting, dan mengisi s.OriginalDBConfigInfo beserta metadata.
 func (s *Service) loadSnapshotFromPath(absPath string) error {

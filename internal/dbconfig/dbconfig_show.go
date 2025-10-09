@@ -7,6 +7,7 @@ package dbconfig
 
 import (
 	"fmt"
+	"sfDBTools/pkg/common"
 	"sfDBTools/pkg/fs"
 	"sfDBTools/pkg/ui"
 	"strings"
@@ -25,7 +26,7 @@ func (s *Service) ShowDatabaseConfig() error {
 		}
 	} else {
 		// Jika user memberikan --file, resolve path dan muat snapshot
-		abs, name, err := s.resolveConfigPath(s.DBConfigShow.File)
+		abs, name, err := common.ResolveConfigPath(s.DBConfigShow.File)
 		if err != nil {
 			return err
 		}

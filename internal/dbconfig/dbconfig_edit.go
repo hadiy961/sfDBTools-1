@@ -8,6 +8,7 @@ package dbconfig
 
 import (
 	"fmt"
+	"sfDBTools/pkg/common"
 	"sfDBTools/pkg/fs"
 	"sfDBTools/pkg/ui"
 	"strings"
@@ -35,7 +36,7 @@ func (s *Service) EditDatabaseConfig() error {
 		}
 
 		// Resolve path dan nama
-		absPath, name, err := s.resolveConfigPath(s.OriginalConfigName)
+		absPath, name, err := common.ResolveConfigPath(s.OriginalConfigName)
 		if err != nil {
 			return err
 		}

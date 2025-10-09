@@ -8,10 +8,11 @@ package dbconfig
 import (
 	"context"
 	"fmt"
+	"log"
+	"sfDBTools/pkg/common"
 	"sfDBTools/pkg/database"
 	"sfDBTools/pkg/ui"
 	"strings"
-	"time"
 )
 
 // ValidateDatabaseConfig mencoba memvalidasi file konfigurasi yang ada.
@@ -27,7 +28,7 @@ func (s *Service) ValidateDatabaseConfig() error {
 		}
 	} else {
 		// Jika user memberikan --file, resolve path dan muat snapshot
-		abs, name, err := s.resolveConfigPath(s.DBConfigShow.File)
+		abs, name, err := common.ResolveConfigPath(s.DBConfigShow.File)
 		if err != nil {
 			return err
 		}
@@ -47,34 +48,27 @@ func (s *Service) ValidateDatabaseConfig() error {
 	filePath := s.OriginalDBConfigInfo.FilePath
 	ui.PrintInfo("Mencoba memvalidasi file: " + filePath)
 
-	host := s.OriginalDBConfigInfo.ServerDBConnection.Host
-	port := s.OriginalDBConfigInfo.ServerDBConnection.Port
-	user := s.OriginalDBConfigInfo.ServerDBConnection.User
-	password := s.OriginalDBConfigInfo.ServerDBConnection.Password
-
-	if host == "" || port == 0 || user == "" {
-		ui.PrintError("Informasi koneksi tidak lengkap di file .cnf: host/port/user diperlukan")
-		return fmt.Errorf("incomplete connection info")
-	}
-
 	// Coba koneksi
-	s.Logger.Debug("Attempting to connect to DB with host: " + host + ", port: " + fmt.Sprintf("%d", port) + ", user: " + user)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	s.Logger.Debug("Mencoba koneksi ke DB dengan host : " + s.OriginalDBConfigInfo.ServerDBConnection.Host + ", port: " + fmt.Sprintf("%d", s.OriginalDBConfigInfo.ServerDBConnection.Port) + ", user: " + s.OriginalDBConfigInfo.ServerDBConnection.User)
 
-	// Buat sebuah fungsi literal (closure) yang membungkus panggilan ke PingMySQL
-	pingTask := func() error {
-		return database.PingMySQL(ctx, host, port, user, password, 5*time.Second)
+	client, err := database.InitializeDatabase(s.DBConfigInfo.ServerDBConnection)
+	if err != nil {
+		// Menggunakan log.Fatalf akan menghentikan aplikasi jika koneksi gagal,
+		// ini adalah pola yang umum untuk service utama.
+		log.Fatalf("Error: %v", err)
 	}
 
-	// Definisikan pesan untuk ditampilkan
-	message := fmt.Sprintf("Menghubungkan ke %s:%d...", host, port)
-	successMessage := "Koneksi Berhasil!"
-	// Panggil helper dengan tugas yang sudah didefinisikan
-	if err := ui.RunWithSpinner(message, successMessage, pingTask); err != nil {
-		return err
+	// 3. PENTING: Defer Close() tetap dilakukan di sini, di fungsi pemanggil (main).
+	// Ini memastikan koneksi ditutup saat fungsi main selesai.
+	defer client.Close()
+
+	ui.PrintInfo("Koneksi database berhasil dibuat dan siap digunakan!")
+
+	if err := client.Ping(context.Background()); err != nil {
+		s.Logger.Error("Gagal melakukan ping ke database: " + err.Error())
+	} else {
+		ui.PrintSuccess("Koneksi database berhasil dan ping sukses!")
 	}
 
-	ui.PrintSuccess("Berhasil terhubung ke server database menggunakan konfigurasi di file.")
 	return nil
 }
