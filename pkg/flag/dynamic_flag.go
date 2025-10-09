@@ -58,26 +58,79 @@ func addFlagsRecursive(cmd *cobra.Command, val reflect.Value, typ reflect.Type) 
 		// Asumsi: Penggunaan "usage" telah diimplementasikan dengan benar
 		usage := fmt.Sprintf("Option for %s", strings.ToLower(field.Name))
 
-		// --- PARSE DEFAULT VALUE DARI TAG STRING ---
-		defaultVal, err := parseTagDefault(defaultTag, field.Type.Kind())
-		if err != nil {
-			return fmt.Errorf("gagal parsing default tag '%s' untuk field %s: %w", defaultTag, field.Name, err)
-		}
-
-		// Pointer ke field struct untuk pendaftaran flag
+		// Prefer nilai dari struct instance (runtime defaults) jika tersedia;
+		// fallback ke tag 'default' bila struct tidak menyediakan nilai.
 		ptr := fieldVal.Addr().Interface()
 
-		// PENTING: Gunakan fungsi NON-P (StringVar, IntVar, dll.)
 		switch field.Type.Kind() {
 		case reflect.String:
-			cmd.Flags().StringP(flagName, shorthand, defaultVal.(string), usage)
+			var def string
+			if !fieldVal.IsZero() {
+				def = fieldVal.String()
+			} else if defaultTag != "" {
+				// gunakan tag jika struct kosong
+				parsed, err := parseTagDefault(defaultTag, reflect.String)
+				if err != nil {
+					return fmt.Errorf("gagal parsing default tag '%s' untuk field %s: %w", defaultTag, field.Name, err)
+				}
+				def = parsed.(string)
+			} else {
+				def = ""
+			}
+			cmd.Flags().StringP(flagName, shorthand, def, usage)
+
 		case reflect.Int:
-			cmd.Flags().IntP(flagName, shorthand, defaultVal.(int), usage)
+			var def int
+			if !fieldVal.IsZero() {
+				def = int(fieldVal.Int())
+			} else if defaultTag != "" {
+				parsed, err := parseTagDefault(defaultTag, reflect.Int)
+				if err != nil {
+					return fmt.Errorf("gagal parsing default tag '%s' untuk field %s: %w", defaultTag, field.Name, err)
+				}
+				def = parsed.(int)
+			} else {
+				def = 0
+			}
+			cmd.Flags().IntP(flagName, shorthand, def, usage)
+
 		case reflect.Bool:
-			cmd.Flags().BoolP(flagName, shorthand, defaultVal.(bool), usage)
+			var def bool
+			if !fieldVal.IsZero() {
+				def = fieldVal.Bool()
+			} else if defaultTag != "" {
+				parsed, err := parseTagDefault(defaultTag, reflect.Bool)
+				if err != nil {
+					return fmt.Errorf("gagal parsing default tag '%s' untuk field %s: %w", defaultTag, field.Name, err)
+				}
+				def = parsed.(bool)
+			} else {
+				def = false
+			}
+			cmd.Flags().BoolP(flagName, shorthand, def, usage)
+
 		case reflect.Slice:
 			if field.Type.Elem().Kind() == reflect.String {
-				defaultSlice := fieldVal.Interface().([]string)
+				var defaultSlice []string
+				if !fieldVal.IsZero() {
+					if v, ok := fieldVal.Interface().([]string); ok {
+						defaultSlice = v
+					} else {
+						defaultSlice = []string{}
+					}
+				} else if defaultTag != "" {
+					parsed, err := parseTagDefault(defaultTag, reflect.Slice)
+					if err != nil {
+						return fmt.Errorf("gagal parsing default tag '%s' untuk field %s: %w", defaultTag, field.Name, err)
+					}
+					if v, ok := parsed.([]string); ok {
+						defaultSlice = v
+					} else {
+						defaultSlice = []string{}
+					}
+				} else {
+					defaultSlice = []string{}
+				}
 				// Menggunakan StringSliceVar
 				cmd.Flags().StringSliceVar(ptr.(*[]string), flagName, defaultSlice, usage)
 			} else {

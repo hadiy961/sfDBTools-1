@@ -52,29 +52,51 @@ func DynamicParseFlags(cmd *cobra.Command, target interface{}) error {
 		}
 
 		// Tentukan jenis field dan panggil helper yang sesuai
+		// Gunakan nilai yang sudah ada di struct target sebagai default (GenerateDefault)
 		switch field.Type.Kind() {
 		case reflect.String:
-			// Ambil nilai default COBRA (sudah termasuk nilai dari config/init)
-			defaultVal := flag.Value.String()
+			var defaultVal string
+			if fieldVal.IsValid() {
+				defaultVal = fieldVal.String()
+			} else {
+				defaultVal = ""
+			}
 			parsedVal := common.GetStringFlagOrEnv(cmd, flagName, envName, defaultVal)
 			fieldVal.SetString(parsedVal)
 
 		case reflect.Int:
-			// Ambil nilai default COBRA
-			defaultVal, _ := cmd.Flags().GetInt(flagName)
+			var defaultVal int
+			if fieldVal.IsValid() {
+				defaultVal = int(fieldVal.Int())
+			} else {
+				defaultVal = 0
+			}
 			parsedVal := common.GetIntFlagOrEnv(cmd, flagName, envName, defaultVal)
 			fieldVal.SetInt(int64(parsedVal))
 
 		case reflect.Bool:
-			// Ambil nilai default COBRA
-			defaultVal, _ := cmd.Flags().GetBool(flagName)
+			var defaultVal bool
+			if fieldVal.IsValid() {
+				defaultVal = fieldVal.Bool()
+			} else {
+				defaultVal = false
+			}
 			parsedVal := common.GetBoolFlagOrEnv(cmd, flagName, envName, defaultVal)
 			fieldVal.SetBool(parsedVal)
 
 		case reflect.Slice:
 			if field.Type.Elem().Kind() == reflect.String {
-				// Ambil nilai default COBRA
-				defaultVal, _ := cmd.Flags().GetStringSlice(flagName)
+				var defaultVal []string
+				if fieldVal.IsValid() {
+					if v, ok := fieldVal.Interface().([]string); ok {
+						defaultVal = v
+					} else {
+						defaultVal = []string{}
+					}
+				} else {
+					defaultVal = []string{}
+				}
+
 				parsedVal := common.GetStringSliceFlagOrEnv(cmd, flagName, envName, defaultVal)
 
 				// Assign slice

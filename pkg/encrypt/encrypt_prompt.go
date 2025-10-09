@@ -47,9 +47,9 @@ func GetEncryptionPassword() (string, string, error) {
 	}
 
 	// Validasi password enkripsi
-	if len(encryptionPassword) < 8 {
-		return "", source, fmt.Errorf("encryption password must be at least 8 characters long")
-	}
+	// if len(encryptionPassword) < 8 {
+	// 	return "", source, fmt.Errorf("encryption password must be at least 8 characters long")
+	// }
 	// Jika valid, kembalikan password dan sumbernya
 	return encryptionPassword, source, nil
 }
