@@ -16,6 +16,11 @@ func Exists(path string) bool {
 	return err == nil
 }
 
+// CreateDir membuat direktori beserta parent-nya jika belum ada
+func CreateDir(dir string) error {
+	return os.MkdirAll(dir, os.ModePerm)
+}
+
 // CheckFileExists cek apakah file dengan nama tertentu ada di direktori yang diberikan
 func CheckFileExists(dir, filename string) (bool, error) {
 	// Gabungkan direktori dan nama file
@@ -33,11 +38,14 @@ func CheckFileExists(dir, filename string) (bool, error) {
 
 // CreateDirIfNotExist membuat direktori jika belum ada
 func CreateDirIfNotExist(dir string) error {
-	// Jika tidak ada, buat direktori
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		// Create directory if it does not exist
-		err := os.MkdirAll(dir, os.ModePerm)
-		if err != nil {
+	// Cek apakah direktori sudah ada
+	exists, err := CheckDirExists(dir)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		// Buat direktori beserta parent-nya
+		if err := CreateDir(dir); err != nil {
 			return err
 		}
 	}

@@ -38,3 +38,25 @@ func ReadFile(path string) ([]byte, error) {
 func RemoveFile(path string) error {
 	return os.Remove(path)
 }
+
+// ReadLinesFromFile membaca semua baris dari file di path yang diberikan.
+func ReadLinesFromFile(path string) ([]string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	lines := []string{}
+	currentLine := ""
+	for _, b := range data {
+		if b == '\n' {
+			lines = append(lines, currentLine)
+			currentLine = ""
+		} else {
+			currentLine += string(b)
+		}
+	}
+	if currentLine != "" {
+		lines = append(lines, currentLine)
+	}
+	return lines, nil
+}

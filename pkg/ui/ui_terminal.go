@@ -14,6 +14,15 @@ import (
 	"strings"
 )
 
+// ConvertSliceTo2D
+func ConvertSliceTo2D(slice []string) [][]string {
+	result := make([][]string, len(slice))
+	for i, v := range slice {
+		result[i] = []string{v}
+	}
+	return result
+}
+
 // GetTerminalSize returns the terminal width and height
 func GetTerminalSize() (width, height int, err error) {
 	lg := app_log.NewLogger()
