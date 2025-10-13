@@ -19,6 +19,7 @@ type Service struct {
 	BackupAll    *structs.BackupAllFlags
 	BackupInfo   *structs.BackupInfo
 	DBConfigInfo *structs.DBConfigInfo
+	FilterStats  *DatabaseFilterStats // Statistik filtering database
 }
 
 // NewService membuat instance baru dari Service dengan dependensi yang di-inject.

@@ -18,7 +18,9 @@ type BackupOptions struct {
 	Encryption      EncryptionOptions
 	Compression     CompressionOptions
 	OutputDirectory string `flag:"output" env:"SFDB_BACKUP_OUTPUT_DIR" default:"./backups"`
+	OutputFile      string // Nama file output spesifik (jika kosong, gunakan format default)
 	DBConfig        DBConfigInfo
+	DiskCheck       bool `flag:"disk-check" env:"SFDB_VERIFICATION_DISK_CHECK" default:"true"` // Apakah cek disk diaktifkan
 }
 
 // EncryptionOptions - Opsi enkripsi untuk backup
@@ -40,10 +42,12 @@ type BackupAllFlags struct {
 	DBList           DBListOptions
 	Cleanup          CleanupOptions
 	Exclude          ExcludeOptions
-	Verification     VerificationOptions
 	BackupInfo       BackupInfo
 	CaptureGtid      bool `flag:"capture-gtid" env:"SFDB_CAPTURE_GTID"`             // Apakah GTID capture diaktifkan
 	CreateBackupInfo bool `flag:"create-backup-info" env:"SFDB_CREATE_BACKUP_INFO"` // Internal: apakah membuat BackupInfo setelah backup selesai
+
+	// Cache internal untuk optimasi performa
+	DbListCache map[string]bool // Cache untuk database whitelist dari file
 }
 
 // DBListOptions - Struct untuk menyimpan flags pada perintah backup db-list
@@ -58,11 +62,6 @@ type ExcludeOptions struct {
 	SystemsDB bool     `flag:"exclude-system" env:"SFDB_BACKUP_EXCLUDE_SYSTEMS" default:"false"` // Apakah sistem dikecualikan
 	Users     bool     `flag:"exclude-user" env:"SFDB_BACKUP_EXCLUDE_USERS" default:"false"`     // Apakah user dikecualikan
 	Data      bool     `flag:"exclude-data" env:"SFDB_BACKUP_EXCLUDE_DATA" default:"false"`      // Apakah exclude data (hanya struktur)
-}
-
-// VerificationOptions - Opsi verifikasi backup
-type VerificationOptions struct {
-	DiskCheck bool `flag:"disk-check" env:"SFDB_VERIFICATION_DISK_CHECK" default:"true"` // Apakah cek disk diaktifkan
 }
 
 // BackupInfo - Struct untuk menyimpan informasi hasil backup

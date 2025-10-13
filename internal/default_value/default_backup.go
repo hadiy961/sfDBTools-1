@@ -30,6 +30,7 @@ func GetDefaultBackupAllFlags() (*structs.BackupAllFlags, error) {
 				Enabled: cfg.Backup.Compression.Required,
 			},
 			OutputDirectory: cfg.Backup.Output.BaseDirectory,
+			DiskCheck:       cfg.Backup.Output.Verification.DiskSpaceCheck,
 		},
 		Cleanup: structs.CleanupOptions{
 			Enabled:       cfg.Backup.Retention.CleanupEnabled,
@@ -44,9 +45,6 @@ func GetDefaultBackupAllFlags() (*structs.BackupAllFlags, error) {
 		},
 		DBList: structs.DBListOptions{
 			File: cfg.Backup.DBList.File,
-		},
-		Verification: structs.VerificationOptions{
-			DiskCheck: true,
 		},
 		CaptureGtid:      cfg.Backup.Output.CaptureGtid,
 		CreateBackupInfo: cfg.Backup.Output.CreateBackupInfo,

@@ -13,6 +13,8 @@ import (
 	"sfDBTools/pkg/database"
 	"sfDBTools/pkg/encrypt"
 	"sfDBTools/pkg/ui"
+
+	"github.com/dustin/go-humanize"
 )
 
 var (
@@ -23,13 +25,26 @@ var (
 
 	// ErrUserCancelled adalah sentinel error untuk menandai pembatalan oleh pengguna.
 	ErrUserCancelled = errors.New("user_cancelled")
+
+	// ErrNoDatabasesToBackup dikembalikan bila tidak ada database untuk di-backup setelah filtering
+	ErrNoDatabasesToBackup = errors.New("tidak ada database untuk di-backup setelah filtering")
 )
+
+// DatabaseFilterStats menyimpan statistik hasil filtering database
+type DatabaseFilterStats struct {
+	TotalFound     int    // Total database yang ditemukan
+	ToBackup       int    // Database yang akan di-backup
+	ExcludedSystem int    // Database sistem yang dikecualikan
+	ExcludedByList int    // Database dikecualikan karena blacklist
+	ExcludedByFile int    // Database dikecualikan karena tidak ada di whitelist file
+	ExcludedEmpty  int    // Database dengan nama kosong/invalid
+	FilterMode     string // Mode filter: "whitelist", "blacklist", atau "system_only"
+}
 
 // ResolveConnectionFromConfigFile memuat informasi koneksi database dari file konfigurasi
 // yang ditentukan dalam BackupOptions.ConfigFile. Jika file tidak ditentukan,
 // fungsi ini tidak melakukan apa-apa.
 func (s *Service) ResolveConnectionFromConfigFile() error {
-
 	abs, name, err := common.ResolveConfigPath(s.BackupAll.BackupOptions.DBConfig.FilePath)
 	if err != nil {
 		return err
@@ -94,61 +109,124 @@ func (s *Service) AturMaxStatementsTime(ctx context.Context, client *database.Cl
 	return originalMaxStatementsTime, nil
 }
 
-// getDatabaseList mendapatkan daftar database dari server, menerapkan filter exclude jika ada.
-func (s *Service) getDatabaseList(ctx context.Context, client *database.Client) ([]string, error) {
-	var databases []string
+// logDatabaseStats menampilkan statistik filtering database
+func (s *Service) logDatabaseStats(stats *DatabaseFilterStats) {
+	s.Logger.Info("=== Statistik Database Filtering ===")
+	s.Logger.Infof("Total database ditemukan: %d", stats.TotalFound)
+	s.Logger.Infof("Database untuk backup: %d", stats.ToBackup)
 
-	rows, err := client.DB().QueryContext(ctx, "SHOW DATABASES")
-	if err != nil {
-		return nil, errors.New("gagal mendapatkan daftar database: " + err.Error())
+	totalExcluded := stats.ExcludedSystem + stats.ExcludedByList + stats.ExcludedByFile + stats.ExcludedEmpty
+	s.Logger.Infof("Total database dikecualikan: %d", totalExcluded)
+
+	if stats.ExcludedSystem > 0 {
+		s.Logger.Infof("  - Database sistem dikecualikan: %d", stats.ExcludedSystem)
 	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var dbName string
-		if err := rows.Scan(&dbName); err != nil {
-			s.Logger.Warn("Gagal membaca nama database: " + err.Error())
-			continue
-		}
-
-		// Terapkan filter exclude
-		if s.shouldExcludeDatabase(dbName) {
-			s.Logger.Info("Mengecualikan database: " + dbName)
-			continue
-		}
-
-		databases = append(databases, dbName)
+	if stats.ExcludedByList > 0 {
+		s.Logger.Infof("  - Database dikecualikan karena blacklist: %d", stats.ExcludedByList)
+	}
+	if stats.ExcludedByFile > 0 {
+		s.Logger.Infof("  - Database dikecualikan karena tidak ada di whitelist: %d", stats.ExcludedByFile)
+	}
+	if stats.ExcludedEmpty > 0 {
+		s.Logger.Infof("  - Database dengan nama invalid: %d", stats.ExcludedEmpty)
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, errors.New("terjadi kesalahan saat membaca daftar database: " + err.Error())
-	}
-
-	return databases, nil
+	s.Logger.Infof("Mode filtering: %s", stats.FilterMode)
+	s.Logger.Info("=====================================")
 }
 
-// shouldExcludeDatabase memeriksa apakah sebuah database harus dikecualikan berdasarkan opsi exclude.
-func (s *Service) shouldExcludeDatabase(dbName string) bool {
-	// Cek exclude sistem database
-	if s.BackupAll.Exclude.SystemsDB {
-		systemDBs := map[string]bool{
-			"information_schema": true,
-			"mysql":              true,
-			"performance_schema": true,
-			"sys":                true,
-			"innodb":             true,
+// CheckAndSelectConfigFile memeriksa dan menampilkan detail file konfigurasi yang dipilih
+func (s *Service) CheckAndSelectConfigFile() error {
+	// Check flag configuration file
+	if s.BackupAll.BackupInfo.FilePath != "" {
+		// Jika tidak ada file konfigurasi, tampilkan pilihan interaktif
+		ui.PrintWarning("Tidak ada file konfigurasi yang ditentukan. Menjalankan mode interaktif...")
+		DBConfigInfo, err := encrypt.SelectExistingDBConfig("Pilih file konfigurasi database sumber:")
+		if err != nil {
+			if err == ErrUserCancelled {
+				s.Logger.Warn("Proses backup dibatalkan oleh pengguna.")
+				return ErrUserCancelled
+			}
+			s.Logger.Warn("Proses pemilihan file konfigurasi gagal: " + err.Error())
+			return err
 		}
-		if systemDBs[dbName] {
-			return true
+		s.BackupAll.BackupOptions.DBConfig = DBConfigInfo
+		s.DisplayConnectionInfo(DBConfigInfo)
+	} else {
+		abs, name, err := common.ResolveConfigPath(s.BackupAll.BackupOptions.DBConfig.FilePath)
+		if err != nil {
+			return err
+		}
+		var encryptionKey string
+		if s.BackupAll.BackupOptions.Encryption.Key == "" {
+			encryptionKey = s.BackupAll.BackupOptions.Encryption.Key
+		} else {
+			encryptionKey = s.BackupAll.BackupOptions.Encryption.Key
+		}
+
+		info, err := encrypt.LoadAndParseConfig(abs, encryptionKey)
+		if err != nil {
+			s.Logger.Warn("Gagal memuat isi detail konfigurasi untuk validasi: " + err.Error())
+		}
+		if info != nil {
+			s.BackupAll.BackupOptions.DBConfig.ServerDBConnection.Host = info.ServerDBConnection.Host
+			s.BackupAll.BackupOptions.DBConfig.ServerDBConnection.Port = info.ServerDBConnection.Port
+			s.BackupAll.BackupOptions.DBConfig.ServerDBConnection.User = info.ServerDBConnection.User
+			// Preserve password if flags didn't provide one
+			if s.BackupAll.BackupOptions.DBConfig.ServerDBConnection.Password == "" {
+				s.BackupAll.BackupOptions.DBConfig.ServerDBConnection.Password = info.ServerDBConnection.Password
+			}
+		}
+		s.BackupAll.BackupOptions.DBConfig.FilePath = abs
+		s.BackupAll.BackupOptions.DBConfig.ConfigName = name
+		s.DisplayConnectionInfo(s.BackupAll.BackupOptions.DBConfig)
+	}
+	return nil
+}
+
+// CaptureGTIDIfNeeded menangani pengambilan GTID jika opsi diaktifkan
+func (s *Service) CaptureGTIDIfNeeded(ctx context.Context, client *database.Client) error {
+	if s.BackupAll.CaptureGtid {
+		// Cek dukungan GTID
+		enabled, pos, err := s.GetGTID(ctx, client)
+
+		if err != nil {
+			if errors.Is(err, ErrGTIDUnsupported) {
+				s.Logger.Warn("Server tidak mendukung GTID: " + err.Error())
+			} else if errors.Is(err, ErrGTIDPermissionDenied) {
+				s.Logger.Warn("Tidak memiliki izin untuk membaca variabel GTID: " + err.Error())
+			} else {
+				s.Logger.Warn("Gagal memeriksa dukungan GTID: " + err.Error())
+			}
+			s.Logger.Warn("Menonaktifkan opsi capture GTID.")
+			s.BackupAll.CaptureGtid = false
+		}
+
+		if enabled {
+			s.Logger.Info("GTID saat ini: " + pos)
+			// Simpan posisi GTID awal untuk referensi
+			s.BackupAll.BackupInfo.GTIDCaptured = pos
+		} else {
+			s.Logger.Warn("GTID tidak diaktifkan pada server ini.")
+			s.Logger.Warn("Menonaktifkan opsi capture GTID.")
+			s.BackupAll.CaptureGtid = false
 		}
 	}
+	return nil
+}
 
-	// Cek exclude berdasarkan daftar yang diberikan user
-	for _, exclude := range s.BackupAll.Exclude.Databases {
-		if dbName == exclude {
-			return true
-		}
+// CheckDatabaseSize memeriksa ukuran database sebelum backup (database/database_count.go)
+func (s *Service) CheckDatabaseSize(ctx context.Context, client *database.Client, dbName string) (int64, error) {
+	size, err := client.GetDatabaseSize(ctx, dbName)
+	if err != nil {
+		s.Logger.Warn("Gagal mendapatkan ukuran database " + dbName + ": " + err.Error())
+		return 0, err
 	}
 
-	return false
+	//convert ukuran ke human readable pakai external package
+	sizeHR := humanize.Bytes(uint64(size))
+
+	// Log ukuran database
+	s.Logger.Info("Ukuran database " + dbName + ": " + sizeHR)
+	return size, nil
 }

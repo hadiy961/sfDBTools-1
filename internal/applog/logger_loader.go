@@ -28,6 +28,14 @@ type Field struct {
 	Value interface{}
 }
 
+// MockLogger membuat instance logger untuk testing
+func MockLogger() Logger {
+	logger := logrus.New()
+	logger.SetOutput(io.Discard) // Disable output untuk testing
+	logger.SetLevel(logrus.DebugLevel)
+	return logger
+}
+
 // Common field constructors
 func String(key, val string) Field            { return Field{Key: key, Value: val} }
 func Strings(key string, vals []string) Field { return Field{Key: key, Value: vals} }
