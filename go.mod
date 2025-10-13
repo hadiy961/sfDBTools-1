@@ -13,7 +13,11 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
-require github.com/go-sql-driver/mysql v1.6.0
+require (
+	github.com/go-sql-driver/mysql v1.6.0
+	github.com/klauspost/compress v1.18.0
+	github.com/klauspost/pgzip v1.2.6
+)
 
 require (
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
