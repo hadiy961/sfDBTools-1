@@ -9,6 +9,7 @@ package backup
 import (
 	"context"
 	"fmt"
+	"sfDBTools/internal/structs"
 	"sfDBTools/pkg/database"
 	"sfDBTools/pkg/fs"
 	"sfDBTools/pkg/ui"
@@ -59,7 +60,17 @@ func (s *Service) GetAndFilterDatabases(ctx context.Context, client *database.Cl
 		return nil, fmt.Errorf("tidak ada database untuk di-backup dari %d database yang ditemukan", totalFound)
 	}
 
-	s.Logger.Infof("Database yang akan di-backup: %v", validDatabases)
+	if excludedCount == 0 {
+		s.Logger.Info("Tidak ada database yang dikecualikan; semua database akan di-backup.")
+	}
+	// Simpan statistik filtering ke struct
+	s.FilterInfo = &structs.FilterInfo{
+		TotalDatabases:    totalFound,
+		ExcludedDatabases: excludedCount,
+		IncludedDatabases: len(validDatabases),
+		SystemDatabases:   totalFound - len(validDatabases) - excludedCount,
+	}
+
 	return validDatabases, nil
 }
 
@@ -72,8 +83,8 @@ func (s *Service) BackupFilterDatabase(dbName string) bool {
 	}
 
 	// 1. Jika ada file whitelist, hanya database dalam file yang diizinkan
-	if s.BackupAll.DBList.File != "" {
-		allowedDBs, err := fs.ReadLinesFromFile(s.BackupAll.DBList.File)
+	if s.BackupOptions.DBList != "" {
+		allowedDBs, err := fs.ReadLinesFromFile(s.BackupOptions.DBList)
 		if err != nil {
 			s.Logger.Warnf("Gagal membaca file db_list: %v", err)
 			return true // Exclude semua jika file gagal dibaca
@@ -89,14 +100,14 @@ func (s *Service) BackupFilterDatabase(dbName string) bool {
 	}
 
 	// 2. Cek blacklist database yang dikecualikan
-	for _, excludeDB := range s.BackupAll.Exclude.Databases {
+	for _, excludeDB := range s.BackupOptions.Exclude.Databases {
 		if strings.TrimSpace(excludeDB) == dbName {
 			return true // Exclude database dalam blacklist
 		}
 	}
 
 	// 3. Cek sistem database jika opsi exclude system aktif
-	if s.BackupAll.Exclude.SystemsDB {
+	if s.BackupOptions.Exclude.SystemsDB {
 		systemDBs := map[string]bool{
 			"information_schema": true,
 			"mysql":              true,

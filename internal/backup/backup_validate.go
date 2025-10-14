@@ -2,13 +2,10 @@ package backup
 
 import (
 	"sfDBTools/pkg/fs"
-	"sfDBTools/pkg/ui"
 )
 
 // ValidateOutput membuat direktori output jika belum ada
 func (s *Service) ValidateOutput() error {
-	// Buat direktori output jika belum ada
-	ui.PrintSubHeader("Validasi Output Backup")
 
 	// Membuat direktori output jika belum ada
 	OutputDir, err := fs.CreateOutputDirs(s.BackupAll.BackupOptions.OutputDirectory, s.Config.Backup.Output.Structure.CreateSubdirs, s.Config.Backup.Output.Structure.Pattern, s.Config.General.ClientCode)
@@ -22,13 +19,8 @@ func (s *Service) ValidateOutput() error {
 		return err
 	}
 
-	// Check disk space if enabled
-
-	s.BackupAll.BackupOptions.OutputDirectory = OutputDir
-	s.BackupAll.BackupOptions.OutputFile = OutputFilePattern
-
-	// Tampilkan path lengkap file output
-	s.Logger.Info("Direktori output siap: " + OutputDir)
-	s.Logger.Info("File backup akan disimpan dengan nama: " + OutputFilePattern)
+	// Update struct dengan path yang sudah divalidasi
+	s.BackupOptions.OutputDirectory = OutputDir
+	s.BackupOptions.OutputFile = OutputFilePattern
 	return nil
 }

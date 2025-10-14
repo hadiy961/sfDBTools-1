@@ -14,12 +14,14 @@ import (
 
 // Service adalah layanan inti yang menjalankan logika dbconfig.
 type Service struct {
-	Logger       log.Logger
-	Config       *config.Config
-	BackupAll    *structs.BackupAllFlags
-	BackupInfo   *structs.BackupInfo
-	DBConfigInfo *structs.DBConfigInfo
-	FilterStats  *DatabaseFilterStats // Statistik filtering database
+	Logger        log.Logger
+	Config        *config.Config
+	BackupAll     *structs.BackupAllFlags
+	BackupInfo    *structs.BackupInfo
+	BackupOptions *structs.BackupOptions
+	DBConfigInfo  *structs.DBConfigInfo
+	FilterInfo    *structs.FilterInfo  // Informasi statistik filtering database
+	FilterStats   *DatabaseFilterStats // Statistik filtering database
 }
 
 // NewService membuat instance baru dari Service dengan dependensi yang di-inject.
@@ -36,6 +38,9 @@ func NewService(logger log.Logger, cfg *config.Config, dbConfig interface{}) *Se
 		case *structs.BackupAllFlags:
 			svc.BackupAll = v
 			svc.BackupInfo = &v.BackupInfo
+			svc.BackupOptions = &v.BackupOptions
+			svc.DBConfigInfo = &v.BackupOptions.DBConfig
+			svc.DBConfigInfo.ServerDBConnection = v.BackupOptions.DBConfig.ServerDBConnection
 		default:
 			// Unknown type: buat default kosong
 			svc.BackupInfo = &structs.BackupInfo{}

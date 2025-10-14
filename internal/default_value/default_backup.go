@@ -29,24 +29,25 @@ func GetDefaultBackupAllFlags() (*structs.BackupAllFlags, error) {
 				Level:   cfg.Backup.Compression.Level,
 				Enabled: cfg.Backup.Compression.Required,
 			},
+			Cleanup: structs.CleanupOptions{
+				Enabled:       cfg.Backup.Retention.CleanupEnabled,
+				Scheduled:     cfg.Backup.Retention.CleanupSchedule,
+				RetentionDays: cfg.Backup.Retention.Days,
+			},
+
+			Exclude: structs.ExcludeOptions{
+				Databases: cfg.Backup.Exclude.Databases,
+				Users:     cfg.Backup.Exclude.User,
+				SystemsDB: cfg.Backup.Exclude.SystemDatabases,
+				Data:      cfg.Backup.Exclude.Data,
+			},
 			OutputDirectory: cfg.Backup.Output.BaseDirectory,
 			DiskCheck:       cfg.Backup.Output.Verification.DiskSpaceCheck,
+			DBList:          cfg.Backup.DBList.File,
 		},
-		Cleanup: structs.CleanupOptions{
-			Enabled:       cfg.Backup.Retention.CleanupEnabled,
-			Scheduled:     cfg.Backup.Retention.CleanupSchedule,
-			RetentionDays: cfg.Backup.Retention.Days,
+		BackupInfo: structs.BackupInfo{
+			Enabled: cfg.Backup.Output.CreateBackupInfo,
 		},
-		Exclude: structs.ExcludeOptions{
-			Databases: cfg.Backup.Exclude.Databases,
-			Users:     cfg.Backup.Exclude.User,
-			SystemsDB: cfg.Backup.Exclude.SystemDatabases,
-			Data:      cfg.Backup.Exclude.Data,
-		},
-		DBList: structs.DBListOptions{
-			File: cfg.Backup.DBList.File,
-		},
-		CaptureGtid:      cfg.Backup.Output.CaptureGtid,
-		CreateBackupInfo: cfg.Backup.Output.CreateBackupInfo,
+		CaptureGtid: cfg.Backup.Output.CaptureGtid,
 	}, nil
 }

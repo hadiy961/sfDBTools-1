@@ -21,6 +21,9 @@ type BackupOptions struct {
 	OutputFile      string // Nama file output spesifik (jika kosong, gunakan format default)
 	DBConfig        DBConfigInfo
 	DiskCheck       bool `flag:"disk-check" env:"SFDB_VERIFICATION_DISK_CHECK" default:"true"` // Apakah cek disk diaktifkan
+	Exclude         ExcludeOptions
+	DBList          string `flag:"db-list" env:"SFDB_BACKUP_DB_LIST_FILE" default:""`
+	Cleanup         CleanupOptions
 }
 
 // EncryptionOptions - Opsi enkripsi untuk backup
@@ -38,13 +41,9 @@ type CleanupOptions struct {
 
 // BackupAllFlags - Struct untuk menyimpan flags pada perintah backup
 type BackupAllFlags struct {
-	BackupOptions    BackupOptions
-	DBList           DBListOptions
-	Cleanup          CleanupOptions
-	Exclude          ExcludeOptions
-	BackupInfo       BackupInfo
-	CaptureGtid      bool `flag:"capture-gtid" env:"SFDB_CAPTURE_GTID"`             // Apakah GTID capture diaktifkan
-	CreateBackupInfo bool `flag:"create-backup-info" env:"SFDB_CREATE_BACKUP_INFO"` // Internal: apakah membuat BackupInfo setelah backup selesai
+	BackupOptions BackupOptions
+	BackupInfo    BackupInfo
+	CaptureGtid   bool `flag:"capture-gtid" env:"SFDB_CAPTURE_GTID"` // Apakah GTID capture diaktifkan
 
 	// Cache internal untuk optimasi performa
 	DbListCache map[string]bool // Cache untuk database whitelist dari file
@@ -52,7 +51,7 @@ type BackupAllFlags struct {
 
 // DBListOptions - Struct untuk menyimpan flags pada perintah backup db-list
 type DBListOptions struct {
-	File string `flag:"db-list" env:"SFDB_BACKUP_DB_LIST_FILE" default:""`
+	DBList string `flag:"db-list" env:"SFDB_BACKUP_DB_LIST_FILE" default:""`
 }
 
 // ExcludeOptions - Struct untuk menyimpan flags pada perintah backup exclude
@@ -66,6 +65,7 @@ type ExcludeOptions struct {
 
 // BackupInfo - Struct untuk menyimpan informasi hasil backup
 type BackupInfo struct {
+	Enabled       bool   // Apakah pembuatan info backup diaktifkan
 	FilePath      string // Path lengkap file backup yang dihasilkan
 	FileSize      int64  // Ukuran file backup dalam bytes
 	Compression   string // Jenis kompresi yang digunakan (jika ada)
@@ -75,4 +75,11 @@ type BackupInfo struct {
 	DataOnly      bool   // Apakah hanya data yang dibackup (tanpa struktur)
 	Duration      int64  // Durasi proses backup dalam detik
 	GTIDCaptured  string // Posisi GTID yang ditangkap (jika ada)
+}
+
+type FilterInfo struct {
+	TotalDatabases    int
+	ExcludedDatabases int
+	IncludedDatabases int
+	SystemDatabases   int
 }

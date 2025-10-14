@@ -15,17 +15,19 @@ import (
 
 // BackupAllDatabases melakukan backup semua database yang terdaftar
 func (s *Service) BackupAllDatabases() error {
-	s.DisplayBackupAllOptions()
+	ui.Headers("Backup Semua Database")
 
 	// Check flag configuration file
 	if err := s.CheckAndSelectConfigFile(); err != nil {
 		return err
 	}
 
+	s.DisplayBackupAllOptions()
+
 	ctx := context.Background()
 
 	// Membuat klien baru dengan semua konfigurasi di atas
-	client, err := database.InitializeDatabase(s.BackupAll.BackupOptions.DBConfig.ServerDBConnection)
+	client, err := database.InitializeDatabase(s.DBConfigInfo.ServerDBConnection)
 	if err != nil {
 		log.Fatalf("Error: %v", err)
 	}
@@ -55,7 +57,7 @@ func (s *Service) BackupAllDatabases() error {
 	}
 
 	// Cek dan filter database yang akan di-backup
-	_, err = s.GetAndFilterDatabases(ctx, client)
+	dbFiltered, err := s.GetAndFilterDatabases(ctx, client)
 	if err != nil {
 		s.Logger.Error("Gagal mendapatkan dan memfilter database: " + err.Error())
 		// Kembalikan nilai awal max_statement_time jika ada error
@@ -63,9 +65,9 @@ func (s *Service) BackupAllDatabases() error {
 		return err
 	}
 
-	// Database sudah siap untuk di-backup
+	// Database filter sudah siap untuk di-backup
 	s.Logger.Info("Database filtering selesai, siap memulai proses backup") // Lakukan dump semua database yang sudah difilter
-	if err := s.DumpAllDB(ctx, client, "all"); err != nil {
+	if err := s.DumpAllDB(ctx, dbFiltered, "all"); err != nil {
 		s.Logger.Error("Proses backup semua database gagal: " + err.Error())
 		// Kembalikan nilai awal max_statement_time jika ada error
 		s.KembalikanMaxStatementsTime(ctx, client, originalMaxStatementsTime)
