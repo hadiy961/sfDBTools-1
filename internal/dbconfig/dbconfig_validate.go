@@ -8,7 +8,6 @@ package dbconfig
 import (
 	"context"
 	"fmt"
-	"log"
 	"sfDBTools/pkg/common"
 	"sfDBTools/pkg/database"
 	"sfDBTools/pkg/ui"
@@ -36,6 +35,7 @@ func (s *Service) ValidateDatabaseConfig() error {
 		s.DBConfigInfo.ConfigName = name
 		if err := s.loadSnapshotFromPath(abs); err != nil {
 			s.Logger.Warn("Gagal memuat isi detail konfigurasi untuk validasi: " + err.Error())
+			return err
 		}
 	}
 
@@ -48,14 +48,16 @@ func (s *Service) ValidateDatabaseConfig() error {
 	filePath := s.OriginalDBConfigInfo.FilePath
 	ui.PrintInfo("Mencoba memvalidasi file: " + filePath)
 
-	// Coba koneksi
-	s.Logger.Debug("Mencoba koneksi ke DB dengan host : " + s.OriginalDBConfigInfo.ServerDBConnection.Host + ", port: " + fmt.Sprintf("%d", s.OriginalDBConfigInfo.ServerDBConnection.Port) + ", user: " + s.OriginalDBConfigInfo.ServerDBConnection.User)
+	// Gunakan OriginalDBConfigInfo untuk koneksi karena ini adalah data yang sudah di-load dari file
+	connInfo := s.OriginalDBConfigInfo.ServerDBConnection
 
-	client, err := database.InitializeDatabase(s.DBConfigInfo.ServerDBConnection)
+	// Coba koneksi
+	s.Logger.Debug("Mencoba koneksi ke DB dengan host : " + connInfo.Host + ", port: " + fmt.Sprintf("%d", connInfo.Port) + ", user: " + connInfo.User)
+
+	client, err := database.InitializeDatabase(connInfo)
 	if err != nil {
-		// Menggunakan log.Fatalf akan menghentikan aplikasi jika koneksi gagal,
-		// ini adalah pola yang umum untuk service utama.
-		log.Fatalf("Error: %v", err)
+		// Jangan gunakan log.Fatalf, kembalikan error yang proper
+		return fmt.Errorf("gagal saat inisialisasi koneksi database: %w", err)
 	}
 
 	// 3. PENTING: Defer Close() tetap dilakukan di sini, di fungsi pemanggil (main).

@@ -35,7 +35,6 @@ var DBConfigValidateCMD = &cobra.Command{
 
 		service := dbconfig.NewService(logger, cfg, DBConfigShow)
 		if err := service.ValidateDatabaseConfig(); err != nil {
-			logger.Error(fmt.Sprintf("Validasi konfigurasi gagal: %v", err))
 			return
 		}
 		logger.Debug("Validasi konfigurasi selesai.")

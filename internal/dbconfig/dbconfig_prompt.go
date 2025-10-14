@@ -35,18 +35,29 @@ func (s *Service) promptDBConfigInfo() error {
 		return common.HandleInputError(err)
 	}
 
+	// Detect edit flow if we already have an OriginalDBConfigInfo or OriginalConfigName.
+	isEditFlow := s.OriginalDBConfigInfo != nil || s.OriginalConfigName != ""
+
+	// Store existing password from loaded config before checking environment
+	var existingPassword string
+	if isEditFlow && s.DBConfigInfo != nil {
+		existingPassword = s.DBConfigInfo.ServerDBConnection.Password
+	}
+
 	//Cek password dari env SFDB_DB_PASSWORD
 	//Jika tidak ada, beri tahu user untuk mengaturnya di env
 	//Untuk keamanan, jangan minta input password di prompt
 	//Namun, jika ingin minta input, uncomment kode di bawah dan comment kode pengecekan env
 	// s.Logger.Debug("Mengecek environment variable SFDB_DB_PASSWORD untuk password database...")
-	s.DBConfigInfo.ServerDBConnection.Password = os.Getenv(common.SFDB_DB_PASSWORD)
-	if s.DBConfigInfo.ServerDBConnection.Password == "" {
+	envPassword := os.Getenv(common.SFDB_DB_PASSWORD)
+	if envPassword != "" {
+		s.DBConfigInfo.ServerDBConnection.Password = envPassword
+	} else if !isEditFlow {
+		// Only show warning for create flow, not edit flow
 		ui.PrintWarning("Environment variable SFDB_DB_PASSWORD tidak ditemukan atau kosong. Silakan atur SFDB_DB_PASSWORD atau ketik password.")
 	}
+
 	// Allow empty password in edit flow to mean "keep existing password".
-	// Detect edit flow if we already have an OriginalDBConfigInfo or OriginalConfigName.
-	isEditFlow := s.OriginalDBConfigInfo != nil || s.OriginalConfigName != ""
 
 	// First try accepting empty input (validator nil). If this is create flow and
 	// user entered empty, we enforce non-empty by asking again with Required.
@@ -57,8 +68,12 @@ func (s *Service) promptDBConfigInfo() error {
 
 	if pw == "" {
 		if isEditFlow {
-			// keep existing password (from env or previously loaded file)
-			// do nothing; leave s.DBConfigInfo.ServerDBConnection.Password as-is
+			// keep existing password (from loaded file if env password not available)
+			if envPassword == "" && existingPassword != "" {
+				s.DBConfigInfo.ServerDBConnection.Password = existingPassword
+				s.Logger.Debug("Keeping existing password from loaded configuration")
+			}
+			// If env password is available, it's already set above
 		} else {
 			// create flow: password required
 			pw, err = input.AskPassword("Database Password", survey.Required)
@@ -127,6 +142,9 @@ func (s *Service) promptSelectExistingConfig() error {
 		FileSize:           info.FileSize,
 		LastModified:       info.LastModified,
 	}
+
+	// Set OriginalConfigName untuk validasi edit
+	s.OriginalConfigName = info.ConfigName
 
 	// Setelah berhasil memuat isi file, simpan snapshot data asli agar dapat
 	// dibandingkan dengan perubahan yang dilakukan user. Sertakan metadata file.
