@@ -42,7 +42,7 @@ func GetDefaultBackupAllFlags() (*structs.BackupAllFlags, error) {
 				Data:      cfg.Backup.Exclude.Data,
 			},
 			OutputDirectory: cfg.Backup.Output.BaseDirectory,
-			DiskCheck:       cfg.Backup.Output.Verification.DiskSpaceCheck,
+			DiskCheck:       cfg.Backup.Verification.DiskSpaceCheck,
 			DBList:          cfg.Backup.DBList.File,
 		},
 		BackupInfo: structs.BackupInfo{

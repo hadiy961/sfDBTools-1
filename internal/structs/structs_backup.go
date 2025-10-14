@@ -39,6 +39,15 @@ type CleanupOptions struct {
 	RetentionDays int    `flag:"cleanup-days" env:"SFDB_CLEANUP_DAYS" default:"30"`             // Jumlah hari untuk menyimpan backup sebelum dihapus (retensi)
 }
 
+// CleanupFlags - Flags khusus untuk command cleanup (lebih sederhana)
+type CleanupFlags struct {
+	OutputDirectory string `flag:"output" env:"SFDB_BACKUP_OUTPUT_DIR" default:"/mnt/nfs/backup"` // Direktori backup yang akan dibersihkan
+	RetentionDays   int    `flag:"cleanup-days" env:"SFDB_CLEANUP_DAYS" default:"30"`             // Jumlah hari untuk menyimpan backup sebelum dihapus
+	Enabled         bool   `flag:"cleanup" env:"SFDB_CLEANUP_ENABLED" default:"true"`             // Aktifkan pembersihan (harus true untuk menjalankan cleanup)
+	DryRun          bool   `flag:"dry-run" env:"SFDB_CLEANUP_DRY_RUN" default:"false"`            // Mode dry-run: tampilkan file yang akan dihapus tanpa menghapus
+	Pattern         string `flag:"pattern" env:"SFDB_CLEANUP_PATTERN" default:""`                 // Pattern file yang akan dibersihkan (opsional)
+}
+
 // BackupAllFlags - Struct untuk menyimpan flags pada perintah backup
 type BackupAllFlags struct {
 	BackupOptions BackupOptions

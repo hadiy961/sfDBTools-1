@@ -11,12 +11,14 @@ package globals
 import (
 	config "sfDBTools/internal/appconfig"
 	log "sfDBTools/internal/applog"
+	"sfDBTools/pkg/database"
 )
 
 // Dependencies adalah struct yang menyimpan semua dependensi global aplikasi.
 type Dependencies struct {
-	Config *config.Config
-	Logger log.Logger
+	Config   *config.Config
+	Logger   log.Logger
+	DBClient *database.Client
 }
 
 // Global variable untuk menyimpan dependensi yang di-inject
@@ -36,4 +38,12 @@ func GetConfig() *config.Config {
 		return nil
 	}
 	return Deps.Config
+}
+
+// GetDBClient adalah helper untuk mengakses database client dari package lain
+func GetDBClient() *database.Client {
+	if Deps == nil {
+		return nil
+	}
+	return Deps.DBClient
 }

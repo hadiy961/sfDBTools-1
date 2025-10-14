@@ -10,6 +10,7 @@ import (
 	"os"
 	"sfDBTools/cmd/backup_cmd"
 	"sfDBTools/cmd/dbconfig_cmd"
+	"sfDBTools/cmd/encrypt_cmd"
 	"sfDBTools/pkg/globals"
 
 	"github.com/spf13/cobra"
@@ -61,5 +62,6 @@ func init() {
 	// Kita anggap 'versionCmd' ada di cmd/version.go
 	rootCmd.AddCommand(versionCmd) // (Perlu diinisialisasi di cmd/version.go)
 	rootCmd.AddCommand(dbconfig_cmd.DBConfigMainCMD)
-	rootCmd.AddCommand(backup_cmd.BackupCMD) // (Perlu diinisialisasi di cmd/backup_cmd/backup.go)
+	rootCmd.AddCommand(backup_cmd.BackupCMD)   // (Perlu diinisialisasi di cmd/backup_cmd/backup.go)
+	rootCmd.AddCommand(encrypt_cmd.EncryptCMD) // Command untuk enkripsi dan dekripsi file
 }

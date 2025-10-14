@@ -26,3 +26,11 @@ type DBConnection struct {
 	Database           string `flag:"database" env:"SFDB_DB_NAME" default:"testdb"`
 	EncryptionKey      string `flag:"encryption-key" env:"SFDB_ENCRYPTION_KEY" default:"mysecretkey"`
 }
+
+// DBTestConnectionFlags - Flags for testing database connection
+type DBTestConnectionFlags struct {
+	ServerDBConnection ServerDBConnection
+	TestDatabase       string `flag:"test-database" env:"SFDB_TEST_DB_NAME" default:""`
+	CreateDatabase     bool   `flag:"create-database" env:"SFDB_CREATE_DATABASE" default:"false"`
+	Verbose            bool   `flag:"verbose" env:"SFDB_VERBOSE" default:"false"`
+}

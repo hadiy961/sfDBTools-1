@@ -12,11 +12,18 @@ import (
 // DumpAllDB adalah fungsi internal untuk melakukan backup semua database
 func (s *Service) DumpAllDB(ctx context.Context, dbFiltered []string, mode string) error {
 
-	ui.PrintSubHeader("Proses Backup")
+	ui.PrintSubHeader("Proses Backup Database")
 
 	s.Logger.Info("Memulai proses backup database...")
 
-	// Pastikan output directory sudah ada dengan memanggil ValidateOutput
+	// 1. Jalankan cleanup backup lama terlebih dahulu untuk membebaskan ruang disk
+	s.Logger.Info("Menjalankan cleanup backup lama sebelum backup...")
+	if err := s.CleanupOldBackups(); err != nil {
+		s.Logger.Errorf("Cleanup backup lama gagal: %v", err)
+		// Lanjutkan backup meskipun cleanup gagal
+	}
+
+	// 2. Pastikan output directory sudah ada dengan memanggil ValidateOutput
 	if err := s.ValidateOutput(); err != nil {
 		return fmt.Errorf("gagal memvalidasi direktori output: %w", err)
 	}
@@ -45,6 +52,11 @@ func (s *Service) DumpAllDB(ctx context.Context, dbFiltered []string, mode strin
 	if compressionRequired {
 		extension := compress.GetFileExtension(compress.CompressionType(compressionType))
 		outputFile += extension
+	}
+
+	// Tambahkan ekstensi enkripsi jika diperlukan
+	if encryptionEnabled {
+		outputFile += ".enc"
 	}
 
 	// Pastikan direktori output ada

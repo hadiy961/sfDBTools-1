@@ -2,7 +2,7 @@ package database
 
 import (
 	"context"
-	"database/sql"
+	"sfDBTools/internal/structs"
 )
 
 // CountDatabases menghitung jumlah database pada server
@@ -16,20 +16,26 @@ func (s *Client) CountDatabases() (int, error) {
 }
 
 // GetDatbaseSize mendapatkan ukuran database dalam bytes
-func (s *Client) GetDatabaseSize(ctx context.Context, dbName string) (int64, error) {
-	var size sql.NullInt64
+func (s *Client) GetDatabaseSize(ctx context.Context, dbName string) (*structs.DatabaseSizeInfo, error) {
 	query := `
-		SELECT SUM(data_length + index_length)
-		FROM information_schema.TABLES
+		SELECT 
+			COALESCE(SUM(data_length), 0) as data_size,
+			COALESCE(SUM(index_length), 0) as index_size,
+			COALESCE(SUM(data_length + index_length), 0) as total_size
+		FROM information_schema.tables 
 		WHERE table_schema = ?
-		GROUP BY table_schema
 	`
-	err := s.db.QueryRowContext(ctx, query, dbName).Scan(&size)
+
+	var dataSize, indexSize, totalSize int64
+	err := s.db.QueryRowContext(ctx, query, dbName).Scan(&dataSize, &indexSize, &totalSize)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	if !size.Valid {
-		return 0, nil // Database kosong atau tidak ada tabel
-	}
-	return size.Int64, nil
+
+	return &structs.DatabaseSizeInfo{
+		DatabaseName: dbName,
+		DataSize:     dataSize,
+		IndexSize:    indexSize,
+		TotalSize:    totalSize,
+	}, nil
 }

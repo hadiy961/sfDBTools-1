@@ -96,14 +96,6 @@ func (s *Service) buildMysqldumpArgs(baseDumpArgs string, dbFiltered []string) [
 		args = append(args, dbFiltered...)
 		s.Logger.Infof("Menggunakan --databases dengan %d database yang dipilih", toBackupDB)
 	}
-	// if s.shouldUseAllDatabases(dbFiltered) {
-	// 	args = append(args, "--all-databases")
-	// 	s.Logger.Infof("Menggunakan --all-databases untuk backup semua database (%d database)", countDB)
-	// } else {
-	// 	args = append(args, "--databases")
-	// 	args = append(args, dbFiltered...)
-	// 	s.Logger.Infof("Menggunakan --databases dengan %d database yang dipilih", countDB)
-	// }
 
 	return args
 }

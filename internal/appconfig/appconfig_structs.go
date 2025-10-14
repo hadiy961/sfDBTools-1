@@ -18,13 +18,14 @@ type Config struct {
 
 // Struct untuk bagian 'backup'
 type BackupConfig struct {
-	Compression   CompressionConfig `yaml:"compression"`
-	MysqlDumpArgs string            `yaml:"mysqldump_args"`
-	Exclude       ExcludeConfig     `yaml:"exclude"`
-	DBList        DBListConfig      `yaml:"db_list"`
-	Retention     RetentionConfig   `yaml:"retention"`
-	Encryption    EncryptionConfig  `yaml:"encryption"`
-	Output        OutputConfig      `yaml:"output"`
+	Compression   CompressionConfig  `yaml:"compression"`
+	MysqlDumpArgs string             `yaml:"mysqldump_args"`
+	Exclude       ExcludeConfig      `yaml:"exclude"`
+	DBList        DBListConfig       `yaml:"db_list"`
+	Retention     RetentionConfig    `yaml:"retention"`
+	Encryption    EncryptionConfig   `yaml:"encryption"`
+	Output        OutputConfig       `yaml:"output"`
+	Verification  VerificationConfig `yaml:"verification"`
 }
 
 type CompressionConfig struct {
@@ -67,10 +68,9 @@ type OutputConfig struct {
 		CreateSubdirs bool   `yaml:"create_subdirs"`
 		Pattern       string `yaml:"pattern"`
 	} `yaml:"structure"`
-	TempDirectory    string             `yaml:"temp_directory"`
-	CaptureGtid      bool               `yaml:"capture_gtid"`
-	CreateBackupInfo bool               `yaml:"create_backup_info"`
-	Verification     VerificationConfig `yaml:"verification"`
+	TempDirectory    string `yaml:"temp_directory"`
+	CaptureGtid      bool   `yaml:"capture_gtid"`
+	CreateBackupInfo bool   `yaml:"create_backup_info"`
 }
 
 type VerificationConfig struct {

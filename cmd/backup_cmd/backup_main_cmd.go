@@ -28,8 +28,9 @@ Gunakan 'backup <sub-command> --help' untuk informasi lebih lanjut tentang masin
 }
 
 func init() {
-	// Tambahkan semua sub-command (Perlu diinisialisasi di file masing-masing)
+	// Tambahkan sub-command ke parent command
 	BackupCMD.AddCommand(BackupCMDAll)
+	BackupCMD.AddCommand(BackupCleanupCmd)
 }
 
 // GetLogger, GetConfig adalah fungsi helper sederhana untuk modul ini

@@ -52,6 +52,7 @@ func (s *Service) DisplayBackupAllOptions() {
 		{"Database List File", s.BackupOptions.DBList},
 		{"Verification Disk Check", strconv.FormatBool(s.BackupOptions.DiskCheck)},
 		{"Capture GTID", strconv.FormatBool(s.BackupAll.CaptureGtid)},
+		{"Create Backup Info File", strconv.FormatBool(s.BackupAll.BackupInfo.Enabled)},
 	}
 	ui.FormatTable(headers, data)
 }

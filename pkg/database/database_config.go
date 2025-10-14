@@ -20,6 +20,7 @@ type Config struct {
 	AllowNativePasswords bool
 	ParseTime            bool
 	Loc                  *time.Location
+	Database             string // Optional, bisa kosong
 }
 
 // DSN menghasilkan string Data Source Name (DSN) dari konfigurasi.
