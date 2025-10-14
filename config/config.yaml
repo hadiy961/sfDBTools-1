@@ -1,7 +1,7 @@
 backup:
     compression:
         type: gzip # gzip, zstd, lz4, none
-        level: best # best, fastest, standard
+        level: standard # best, fastest, standard
         required: true # true, false
     encryption:
         enabled: true # true, false

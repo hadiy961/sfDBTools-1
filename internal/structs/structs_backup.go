@@ -58,6 +58,13 @@ type BackupAllFlags struct {
 	DbListCache map[string]bool // Cache untuk database whitelist dari file
 }
 
+// BackupDBFlags - Struct untuk menyimpan flags pada perintah backup db
+type BackupDBFlags struct {
+	BackupOptions BackupOptions
+	BackupInfo    BackupInfo
+	DBName        []string `flag:"db" env:"SFDB_BACKUP_DB_NAME" default:""` // Nama database yang akan dibackup
+}
+
 // DBListOptions - Struct untuk menyimpan flags pada perintah backup db-list
 type DBListOptions struct {
 	DBList string `flag:"db-list" env:"SFDB_BACKUP_DB_LIST_FILE" default:""`

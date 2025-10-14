@@ -15,16 +15,16 @@ import (
 )
 
 var BackupCMDAll = &cobra.Command{
-	Use:   "all",
+	Use:   "all-databases",
 	Short: "Membuat backup semua database",
-	Long: `Perintah 'all' memungkinkan pengguna untuk membuat backup dari semua database yang terdaftar.
+	Long: `Perintah 'all-databases' memungkinkan pengguna untuk membuat backup dari semua database yang terdaftar.
 Pengguna dapat memilih untuk mengisi konfigurasi secara interaktif atau menggunakan flag untuk input non-interaktif.
-Gunakan 'backup all --help' untuk informasi lebih lanjut tentang opsi yang tersedia.`,
+Gunakan 'backup all-databases --help' untuk informasi lebih lanjut tentang opsi yang tersedia.`,
 	Example: `  # Membuat backup semua database secara interaktif
-  backup all
+  backup all-databases --config-name local --host localhost --port 3306 --username user --password pass --encryption-key mydb
 
   # Membuat backup semua database dengan input non-interaktif
-  backup all --config-name local --host localhost --port 3306 --username user --password pass --encryption-key mydb --interactive=false
+  backup all-databases --config-name local --host localhost --port 3306 --username user --password pass --encryption-key mydb --interactive=false
 `,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Akses logger dan config yang sudah di-inject

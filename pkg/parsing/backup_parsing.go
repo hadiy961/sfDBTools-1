@@ -14,6 +14,26 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// ParseBackupDBFlags mem-parse flags untuk perintah 'backup db'
+func ParseBackupDBFlags(cmd *cobra.Command) (GenerateDefault *structs.BackupDBFlags, err error) {
+	// 1. Dapatkan nilai default dari Configuration.
+	// Nilai ini akan menjadi fallback terakhir.
+	GenerateDefault, err = defaultvalue.GetDefaultBackupFlags()
+	if err != nil {
+		// Kembalikan error agar caller (seperti fungsi Run Cobra) yang menanganinya.
+		return nil, fmt.Errorf("failed to load general backup defaults from config: %w", err)
+	}
+
+	// 2. Parse flags dinamis ke dalam struct menggunakan refleksi.
+	// Flags sudah didaftarkan pada init/command setup, jadi kita hanya membaca
+	// nilainya ke dalam struct target.
+	if err := DynamicParseFlags(cmd, GenerateDefault); err != nil {
+		return nil, fmt.Errorf("failed to dynamically parse general backup flags: %w", err)
+	}
+
+	// 3. Kembalikan struct yang sudah diisi.
+	return GenerateDefault, nil
+}
 func ParseBackupAllFlags(cmd *cobra.Command) (GenerateDefault *structs.BackupAllFlags, err error) {
 	// 1. Dapatkan nilai default dari Configuration.
 	// Nilai ini akan menjadi fallback terakhir.

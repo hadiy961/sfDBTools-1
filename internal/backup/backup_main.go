@@ -16,6 +16,7 @@ import (
 type Service struct {
 	Logger        log.Logger
 	Config        *config.Config
+	BackupDB      *structs.BackupDBFlags
 	BackupAll     *structs.BackupAllFlags
 	BackupInfo    *structs.BackupInfo
 	BackupOptions *structs.BackupOptions
@@ -31,7 +32,7 @@ func NewService(logger log.Logger, cfg *config.Config, dbConfig interface{}) *Se
 		Config: cfg,
 	}
 
-	// Jika caller memberikan flags (bisa berupa DBConfigCreateFlags atau DBConfigEditFlags),
+	// Jika caller memberikan flags (bisa berupa BackupAllFlags atau BackupDBFlags),
 	// ambil nilai DBConfigInfo dan flag Interactive.
 	if dbConfig != nil {
 		switch v := dbConfig.(type) {
@@ -41,12 +42,22 @@ func NewService(logger log.Logger, cfg *config.Config, dbConfig interface{}) *Se
 			svc.BackupOptions = &v.BackupOptions
 			svc.DBConfigInfo = &v.BackupOptions.DBConfig
 			svc.DBConfigInfo.ServerDBConnection = v.BackupOptions.DBConfig.ServerDBConnection
+		case *structs.BackupDBFlags:
+			svc.BackupDB = v
+			svc.BackupInfo = &v.BackupInfo
+			svc.BackupOptions = &v.BackupOptions
+			svc.DBConfigInfo = &v.BackupOptions.DBConfig
+			svc.DBConfigInfo.ServerDBConnection = v.BackupOptions.DBConfig.ServerDBConnection
 		default:
 			// Unknown type: buat default kosong
 			svc.BackupInfo = &structs.BackupInfo{}
+			svc.BackupOptions = &structs.BackupOptions{}
+			svc.DBConfigInfo = &structs.DBConfigInfo{}
 		}
 	} else {
 		svc.BackupInfo = &structs.BackupInfo{}
+		svc.BackupOptions = &structs.BackupOptions{}
+		svc.DBConfigInfo = &structs.DBConfigInfo{}
 	}
 
 	return svc

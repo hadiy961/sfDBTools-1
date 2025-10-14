@@ -35,24 +35,24 @@ type DatabaseFilterStats struct {
 // yang ditentukan dalam BackupOptions.ConfigFile. Jika file tidak ditentukan,
 // fungsi ini tidak melakukan apa-apa.
 func (s *Service) ResolveConnectionFromConfigFile() error {
-	abs, name, err := common.ResolveConfigPath(s.BackupAll.BackupOptions.DBConfig.FilePath)
+	abs, name, err := common.ResolveConfigPath(s.BackupOptions.DBConfig.FilePath)
 	if err != nil {
 		return err
 	}
 	s.Logger.Infof("Menggunakan konfigurasi dari file: %s (%s)", abs, name)
-	s.BackupAll.BackupOptions.DBConfig.FilePath = abs
+	s.BackupOptions.DBConfig.FilePath = abs
 
-	info, err := encrypt.LoadAndParseConfig(abs, s.BackupAll.BackupOptions.Encryption.Key)
+	info, err := encrypt.LoadAndParseConfig(abs, s.BackupOptions.Encryption.Key)
 	if err != nil {
 		s.Logger.Warn("Gagal memuat isi detail konfigurasi untuk validasi: " + err.Error())
 	}
 	if info != nil {
-		s.BackupAll.BackupOptions.DBConfig.ServerDBConnection.Host = info.ServerDBConnection.Host
-		s.BackupAll.BackupOptions.DBConfig.ServerDBConnection.Port = info.ServerDBConnection.Port
-		s.BackupAll.BackupOptions.DBConfig.ServerDBConnection.User = info.ServerDBConnection.User
+		s.BackupOptions.DBConfig.ServerDBConnection.Host = info.ServerDBConnection.Host
+		s.BackupOptions.DBConfig.ServerDBConnection.Port = info.ServerDBConnection.Port
+		s.BackupOptions.DBConfig.ServerDBConnection.User = info.ServerDBConnection.User
 		// Preserve password if flags didn't provide one
-		if s.BackupAll.BackupOptions.DBConfig.ServerDBConnection.Password == "" {
-			s.BackupAll.BackupOptions.DBConfig.ServerDBConnection.Password = info.ServerDBConnection.Password
+		if s.BackupOptions.DBConfig.ServerDBConnection.Password == "" {
+			s.BackupOptions.DBConfig.ServerDBConnection.Password = info.ServerDBConnection.Password
 		}
 	}
 	return nil
