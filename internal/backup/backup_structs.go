@@ -45,26 +45,6 @@ type DatabaseFilterStats struct {
 	FilterMode     string // Mode filter: "whitelist", "blacklist", atau "system_only"
 }
 
-// DatabaseDetailInfo berisi informasi detail database
-type DatabaseDetailInfo struct {
-	DatabaseName   string `json:"database_name"`
-	SizeBytes      int64  `json:"size_bytes"`
-	SizeHuman      string `json:"size_human"`
-	TableCount     int    `json:"table_count"`
-	ProcedureCount int    `json:"procedure_count"`
-	FunctionCount  int    `json:"function_count"`
-	ViewCount      int    `json:"view_count"`
-	UserGrantCount int    `json:"user_grant_count"`
-	CollectionTime string `json:"collection_time"`
-	Error          string `json:"error,omitempty"` // jika ada error saat collect
-}
-
-// DatabaseDetailJob untuk worker pattern
-type DatabaseDetailJob struct {
-	DatabaseName string
-	Client       *database.Client
-}
-
 // BackupConfig untuk konfigurasi backup entry point
 type BackupEntryConfig struct {
 	HeaderTitle string
@@ -114,7 +94,7 @@ type BackupSummary struct {
 	FailedDatabases     []FailedDatabaseInfo `json:"failed_databases"`
 
 	// Detail database info
-	DatabaseDetails map[string]DatabaseDetailInfo `json:"database_details,omitempty"` // Detail informasi setiap database
+	DatabaseDetails map[string]database.DatabaseDetailInfo `json:"database_details,omitempty"` // Detail informasi setiap database
 
 	// Informasi server database yang digunakan untuk backup
 	ServerInfo ServerConnectionInfo `json:"server_info,omitempty"`
@@ -155,12 +135,12 @@ type BackupConfigSummary struct {
 
 // DatabaseBackupInfo berisi informasi database yang berhasil dibackup
 type DatabaseBackupInfo struct {
-	DatabaseName  string              `json:"database_name"`
-	OutputFile    string              `json:"output_file"`
-	FileSize      int64               `json:"file_size_bytes"`
-	FileSizeHuman string              `json:"file_size_human"`
-	Duration      string              `json:"duration"`
-	DetailInfo    *DatabaseDetailInfo `json:"detail_info,omitempty"` // Informasi detail database
+	DatabaseName  string                       `json:"database_name"`
+	OutputFile    string                       `json:"output_file"`
+	FileSize      int64                        `json:"file_size_bytes"`
+	FileSizeHuman string                       `json:"file_size_human"`
+	Duration      string                       `json:"duration"`
+	DetailInfo    *database.DatabaseDetailInfo `json:"detail_info,omitempty"` // Informasi detail database
 }
 
 // FailedDatabaseInfo berisi informasi database yang gagal dibackup
@@ -186,4 +166,5 @@ type ServerConnectionInfo struct {
 	User     string `json:"user"`
 	Database string `json:"database,omitempty"`
 	Config   string `json:"config_name,omitempty"`
+	Version  string `json:"version,omitempty"`
 }

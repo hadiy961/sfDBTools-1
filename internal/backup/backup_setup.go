@@ -103,6 +103,12 @@ func (s *Service) SetupBackupExecution() (BackupConfig, error) {
 		s.Logger.Info("Kompresi tidak diaktifkan, melewati langkah kompresi...")
 	}
 
+	if s.BackupOptions.Exclude.Data {
+		s.Logger.Info("Opsi exclude-data diaktifkan: hanya struktur database yang akan di-backup.")
+	} else {
+		s.Logger.Info("Data database akan disertakan dalam backup.")
+	}
+
 	return config, nil
 }
 

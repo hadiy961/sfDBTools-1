@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sfDBTools/pkg/database"
 	"sfDBTools/pkg/ui" // <-- Menggunakan package UI Anda
 	"time"
 
@@ -34,7 +35,7 @@ func (s *Service) CreateBackupSummary(
 	failedDBs []FailedDatabaseInfo,
 	startTime time.Time,
 	errors []string,
-	databaseDetails map[string]DatabaseDetailInfo,
+	databaseDetails map[string]database.DatabaseDetailInfo,
 ) *BackupSummary {
 	endTime := time.Now()
 
@@ -51,7 +52,7 @@ func (s *Service) CreateBackupSummary(
 		status = "empty" // Tidak ada database yang diproses
 	}
 
-	return &BackupSummary{
+	summary := &BackupSummary{
 		BackupID:            fmt.Sprintf("backup_%s", startTime.Format(backupIDTimeFormat)),
 		Timestamp:           startTime,
 		BackupMode:          backupMode,
@@ -74,6 +75,8 @@ func (s *Service) CreateBackupSummary(
 		},
 		Errors: errors,
 	}
+
+	return summary
 }
 
 // buildDatabaseStats membuat statistik database.
@@ -223,6 +226,9 @@ func (s *Service) displayServerInfo(summary *BackupSummary) {
 	}
 	if summary.ServerInfo.Config != "" {
 		data = append(data, []string{"Config", summary.ServerInfo.Config})
+	}
+	if summary.ServerInfo.Version != "" {
+		data = append(data, []string{"Version", summary.ServerInfo.Version})
 	}
 	ui.FormatTable([]string{"Property", "Value"}, data)
 }

@@ -32,14 +32,6 @@ func (s *Service) ExecuteBackupCommand(config BackupEntryConfig) error {
 		}
 	}
 
-	// Log database yang akan di-backup (jika mode separate)
-	if config.BackupMode == "separate" {
-		s.Logger.Info("Database yang akan di-backup:")
-		for _, db := range dbFiltered {
-			s.Logger.Infof("- %s", db)
-		}
-	}
-
 	// Lakukan backup dengan mode yang ditentukan
 	if err := s.ExecuteBackup(ctx, client, dbFiltered, config.BackupMode, true); err != nil {
 		s.Logger.Error(config.LogPrefix + " gagal: " + err.Error())
@@ -62,8 +54,8 @@ func (s *Service) ExecuteBackupCommand(config BackupEntryConfig) error {
 // BackupDatabase melakukan backup database dengan file terpisah per database
 func (s *Service) BackupDatabase() error {
 	config := BackupEntryConfig{
-		HeaderTitle: "Backup Database",
-		ShowOptions: false,
+		HeaderTitle: "Backup Database (Tiap Database Terpisah)",
+		ShowOptions: true,
 		BackupMode:  "separate",
 		EnableGTID:  false,
 		SuccessMsg:  "", // No success message for database backup
@@ -75,7 +67,7 @@ func (s *Service) BackupDatabase() error {
 // BackupAllDatabases melakukan backup semua database dalam satu file
 func (s *Service) BackupAllDatabases() error {
 	config := BackupEntryConfig{
-		HeaderTitle: "Backup Semua Database",
+		HeaderTitle: "Backup Database (Tiap Database Digabung)",
 		ShowOptions: true,
 		BackupMode:  "combined",
 		EnableGTID:  true,

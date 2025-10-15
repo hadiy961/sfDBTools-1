@@ -10,6 +10,7 @@ import (
 	"sfDBTools/internal/backup"
 	flags "sfDBTools/pkg/flag"
 	"sfDBTools/pkg/parsing"
+	"sfDBTools/pkg/ui"
 
 	"github.com/spf13/cobra"
 )
@@ -30,7 +31,7 @@ Gunakan 'backup all-databases --help' untuk informasi lebih lanjut tentang opsi 
 		// Akses logger dan config yang sudah di-inject
 		logger := GetLogger()
 		cfg := GetConfig()
-
+		ui.ClearScreen()
 		logger.Info("Memulai proses backup database...")
 
 		// Resolve configuration from flags
@@ -39,15 +40,27 @@ Gunakan 'backup all-databases --help' untuk informasi lebih lanjut tentang opsi 
 			logger.Errorf("Gagal mem-parse flags: %v", err)
 			return
 		}
-		// Debug: tampilkan flags yang sudah di-parse
-		logger.Debugf("Flags yang digunakan: %+v", BackupAllFlags)
+
 		// Buat service backup dengan state dari flags
 		service := backup.NewService(logger, cfg, BackupAllFlags)
 
-		// Jalankan proses backup all
-		if err := service.BackupAllDatabases(); err != nil {
-			logger.Errorf("Backup semua database gagal: %v", err)
+		// validasi mode backup
+		if BackupAllFlags.Mode != "single" && BackupAllFlags.Mode != "multi" {
+			logger.Errorf("Mode backup tidak valid: %s. Gunakan 'single' atau 'multi'.", BackupAllFlags.Mode)
 			return
+		}
+
+		// Jalankan proses backup berdasarkan mode yang dipilih
+		if BackupAllFlags.Mode == "single" {
+			if err := service.BackupAllDatabases(); err != nil {
+				logger.Errorf("Backup semua database gagal: %v", err)
+				return
+			}
+		} else {
+			if err := service.BackupDatabase(); err != nil {
+				logger.Errorf("Backup database gagal: %v", err)
+				return
+			}
 		}
 
 	},

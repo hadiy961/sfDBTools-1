@@ -70,7 +70,6 @@ func GetDefaultBackupAllFlags() (*structs.BackupAllFlags, error) {
 			},
 			Cleanup: structs.CleanupOptions{
 				Enabled:       cfg.Backup.Retention.CleanupEnabled,
-				Scheduled:     cfg.Backup.Retention.CleanupSchedule,
 				RetentionDays: cfg.Backup.Retention.Days,
 			},
 

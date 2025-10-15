@@ -11,8 +11,6 @@ import (
 	"sfDBTools/pkg/compress"
 	"sfDBTools/pkg/database"
 	"sfDBTools/pkg/encrypt"
-	"sfDBTools/pkg/ui"
-	"strings"
 	"sync" // Diperlukan untuk konkurensi
 	"time"
 )
@@ -29,6 +27,28 @@ func (s *Service) ExecuteBackup(ctx context.Context, client *database.Client, db
 	startTime := time.Now()
 	var result backupResult
 
+	// 3. (Opsional) Kumpulkan detail database jika diminta — lakukan sebelum backup
+	var databaseDetails map[string]database.DatabaseDetailInfo
+	if collectDetails {
+		if len(dbFiltered) > 0 {
+			// Pastikan nama database unik
+			uniqueDBs := make(map[string]bool)
+			for _, dbName := range dbFiltered {
+				uniqueDBs[dbName] = true
+			}
+			dbNames := make([]string, 0, len(uniqueDBs))
+			for dbName := range uniqueDBs {
+				dbNames = append(dbNames, dbName)
+			}
+
+			s.Logger.Info("Mengumpulkan detail informasi database sebelum backup...")
+			databaseDetails = database.CollectDatabaseDetails(ctx, client, dbNames, s.Logger)
+		} else {
+			s.Logger.Info("Tidak ada database untuk dikumpulkan detailnya sebelum backup.")
+			databaseDetails = make(map[string]database.DatabaseDetailInfo)
+		}
+	}
+
 	// 2. Lakukan backup berdasarkan mode
 	if backupMode == "separate" {
 		result = s.executeBackupSeparate(ctx, config, dbFiltered)
@@ -36,24 +56,17 @@ func (s *Service) ExecuteBackup(ctx context.Context, client *database.Client, db
 		result = s.executeBackupCombined(ctx, config, dbFiltered)
 	}
 
-	// 3. (Opsional) Kumpulkan detail database jika diminta
-	var databaseDetails map[string]DatabaseDetailInfo
-	if collectDetails && len(result.successful) > 0 {
-		uniqueDBs := make(map[string]bool)
-		for _, db := range result.successful {
-			uniqueDBs[db.DatabaseName] = true
-		}
-		dbNames := make([]string, 0, len(uniqueDBs))
-		for dbName := range uniqueDBs {
-			dbNames = append(dbNames, dbName)
-		}
-
-		s.Logger.Info("Mengumpulkan detail informasi database...")
-		databaseDetails = s.CollectDatabaseDetails(ctx, client, dbNames)
-	}
-
 	// 4. Buat, simpan, dan tampilkan summary
 	summary := s.CreateBackupSummary(backupMode, dbFiltered, result.successful, result.failed, startTime, result.errors, databaseDetails)
+	// Populate server version using the active client if available
+	if client != nil {
+		if ver, err := client.GetVersion(ctx); err == nil {
+			summary.ServerInfo.Version = ver
+		} else {
+			s.Logger.Debugf("Gagal mengambil versi server dari client aktif: %v", err)
+		}
+	}
+
 	if err := s.SaveSummaryToJSON(summary); err != nil {
 		s.Logger.Errorf("Gagal menyimpan summary ke JSON: %v", err)
 	}
@@ -73,7 +86,6 @@ func (s *Service) ExecuteBackup(ctx context.Context, client *database.Client, db
 
 // executeBackupSeparate melakukan backup dengan file terpisah per database secara paralel menggunakan worker pool.
 func (s *Service) executeBackupSeparate(ctx context.Context, config BackupConfig, dbFiltered []string) backupResult {
-	ui.PrintSubHeader("Proses Backup Database Terpisah (Mode Paralel)")
 	dbCount := len(dbFiltered)
 	s.Logger.Infof("Total database yang akan di-backup: %d", dbCount)
 
@@ -143,7 +155,6 @@ func (s *Service) backupSingleDatabase(ctx context.Context, config BackupConfig,
 	fullOutputPath := filepath.Join(config.OutputDir, outputFile)
 
 	mysqldumpArgs := s.buildMysqldumpArgs(config.BaseDumpArgs, nil, dbName)
-
 	if err := s.executeMysqldumpWithPipe(ctx, mysqldumpArgs, fullOutputPath, config.CompressionRequired, config.CompressionType); err != nil {
 		return DatabaseBackupInfo{}, err
 	}
@@ -165,7 +176,6 @@ func (s *Service) backupSingleDatabase(ctx context.Context, config BackupConfig,
 
 // executeBackupCombined melakukan backup dengan satu file gabungan (sekuensial).
 func (s *Service) executeBackupCombined(ctx context.Context, config BackupConfig, dbFiltered []string) backupResult {
-	ui.PrintSubHeader("Proses Backup Database Gabungan")
 	s.Logger.Info("Memulai proses backup...")
 
 	var res backupResult
@@ -275,8 +285,8 @@ func (s *Service) executeMysqldumpWithPipe(ctx context.Context, mysqldumpArgs []
 	cmd.Stdout = writer
 	cmd.Stderr = os.Stderr
 
-	logArgs := s.sanitizeArgsForLogging(mysqldumpArgs)
-	s.Logger.Infof("Command: mysqldump %s", strings.Join(logArgs, " "))
+	// logArgs := s.sanitizeArgsForLogging(mysqldumpArgs)
+	// s.Logger.Infof("Command: mysqldump %s", strings.Join(logArgs, " "))
 
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("mysqldump gagal: %w", err)

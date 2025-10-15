@@ -86,6 +86,11 @@ func (s *Service) buildMysqldumpArgs(baseDumpArgs string, dbFiltered []string, s
 		args = append(args, baseArgs...)
 	}
 
+	// jika exclude-data diaktifkan, tambahkan --no-data
+	if s.BackupOptions.Exclude.Data {
+		args = append(args, "--no-data")
+	}
+
 	// Mode single database
 	if singleDB != "" {
 		args = append(args, "--databases")
@@ -101,11 +106,9 @@ func (s *Service) buildMysqldumpArgs(baseDumpArgs string, dbFiltered []string, s
 	// Tentukan apakah menggunakan --all-databases atau --databases
 	if totalDB == toBackupDB && excludedDB == 0 {
 		args = append(args, "--all-databases")
-		s.Logger.Infof("Menggunakan --all-databases untuk backup semua database (%d database)", totalDB)
 	} else {
 		args = append(args, "--databases")
 		args = append(args, dbFiltered...)
-		s.Logger.Infof("Menggunakan --databases dengan %d database yang dipilih", toBackupDB)
 	}
 
 	return args

@@ -34,9 +34,9 @@ type EncryptionOptions struct {
 
 // CleanupOptions - Opsi pembersihan backup lama
 type CleanupOptions struct {
-	Enabled       bool   `flag:"cleanup" env:"SFDB_CLEANUP_ENABLED" default:"false"`            // Aktifkan pembersihan otomatis backup lama sesuai kebijakan retensi
-	Scheduled     string `flag:"cleanup-schedule" env:"SFDB_CLEANUP_SCHEDULED" default:"daily"` // Jadwal pembersihan: daily, weekly, monthly
-	RetentionDays int    `flag:"cleanup-days" env:"SFDB_CLEANUP_DAYS" default:"30"`             // Jumlah hari untuk menyimpan backup sebelum dihapus (retensi)
+	Enabled       bool   `flag:"cleanup" env:"SFDB_CLEANUP_ENABLED" default:"false"` // Aktifkan pembersihan otomatis backup lama sesuai kebijakan retensi
+	Scheduled     string // Jadwal pembersihan: daily, weekly, monthly
+	RetentionDays int    `flag:"cleanup-days" env:"SFDB_CLEANUP_DAYS" default:"30"` // Jumlah hari untuk menyimpan backup sebelum dihapus (retensi)
 }
 
 // CleanupFlags - Flags khusus untuk command cleanup (lebih sederhana)
@@ -52,8 +52,8 @@ type CleanupFlags struct {
 type BackupAllFlags struct {
 	BackupOptions BackupOptions
 	BackupInfo    BackupInfo
-	CaptureGtid   bool `flag:"capture-gtid" env:"SFDB_CAPTURE_GTID"` // Apakah GTID capture diaktifkan
-
+	CaptureGtid   bool   `flag:"capture-gtid" env:"SFDB_CAPTURE_GTID"`         // Apakah GTID capture diaktifkan
+	Mode          string `flag:"mode" env:"SFDB_BACKUP_MODE" default:"single"` // Mode backup: single atau multi
 	// Cache internal untuk optimasi performa
 	DbListCache map[string]bool // Cache untuk database whitelist dari file
 }
@@ -72,11 +72,11 @@ type DBListOptions struct {
 
 // ExcludeOptions - Struct untuk menyimpan flags pada perintah backup exclude
 type ExcludeOptions struct {
-	Databases []string `flag:"exclude-db" env:"SFDB_BACKUP_EXCLUDE_DATABASES" default:""`        // Daftar database yang dikecualikan, dipisah koma
-	Tables    []string `flag:"exclude-tables" env:"SFDB_BACKUP_EXCLUDE_TABLES" default:""`       // Daftar tabel yang dikecualikan, dipisah koma
-	SystemsDB bool     `flag:"exclude-system" env:"SFDB_BACKUP_EXCLUDE_SYSTEMS" default:"false"` // Apakah sistem dikecualikan
-	Users     bool     `flag:"exclude-user" env:"SFDB_BACKUP_EXCLUDE_USERS" default:"false"`     // Apakah user dikecualikan
-	Data      bool     `flag:"exclude-data" env:"SFDB_BACKUP_EXCLUDE_DATA" default:"false"`      // Apakah exclude data (hanya struktur)
+	Databases []string `flag:"exclude-db" env:"SFDB_BACKUP_EXCLUDE_DATABASES" default:""` // Daftar database yang dikecualikan, dipisah koma
+	// Tables    []string `flag:"exclude-tables" env:"SFDB_BACKUP_EXCLUDE_TABLES" default:""`       // Daftar tabel yang dikecualikan, dipisah koma
+	SystemsDB bool `flag:"exclude-system" env:"SFDB_BACKUP_EXCLUDE_SYSTEMS" default:"false"` // Apakah sistem dikecualikan
+	Users     bool `flag:"exclude-user" env:"SFDB_BACKUP_EXCLUDE_USERS" default:"false"`     // Apakah user dikecualikan
+	Data      bool `flag:"exclude-data" env:"SFDB_BACKUP_EXCLUDE_DATA" default:"false"`      // Apakah exclude data (hanya struktur)
 }
 
 // BackupInfo - Struct untuk menyimpan informasi hasil backup
