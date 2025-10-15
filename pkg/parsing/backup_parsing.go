@@ -53,3 +53,19 @@ func ParseBackupAllFlags(cmd *cobra.Command) (GenerateDefault *structs.BackupAll
 	// 3. Kembalikan struct yang sudah diisi.
 	return GenerateDefault, nil
 }
+
+// ParseBackupSummaryFlags mem-parse flags untuk perintah 'backup summary'
+func ParseBackupSummaryFlags(cmd *cobra.Command) (*structs.BackupSummaryFlags, error) {
+	// Buat struct default
+	summaryFlags := &structs.BackupSummaryFlags{
+		BackupID: "",
+		Latest:   false,
+	}
+
+	// Parse flags dinamis ke dalam struct menggunakan refleksi
+	if err := DynamicParseFlags(cmd, summaryFlags); err != nil {
+		return nil, fmt.Errorf("failed to dynamically parse backup summary flags: %w", err)
+	}
+
+	return summaryFlags, nil
+}

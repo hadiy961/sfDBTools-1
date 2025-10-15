@@ -99,3 +99,9 @@ type FilterInfo struct {
 	IncludedDatabases int
 	SystemDatabases   int
 }
+
+// BackupSummaryFlags - Struct untuk menyimpan flags pada perintah backup summary
+type BackupSummaryFlags struct {
+	BackupID string `flag:"backup-id" env:"SFDB_BACKUP_SUMMARY_ID" default:""`       // ID backup untuk ditampilkan
+	Latest   bool   `flag:"latest" env:"SFDB_BACKUP_SUMMARY_LATEST" default:"false"` // Tampilkan summary terbaru
+}

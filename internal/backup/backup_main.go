@@ -48,6 +48,9 @@ func NewService(logger log.Logger, cfg *config.Config, dbConfig interface{}) *Se
 			svc.BackupOptions = &v.BackupOptions
 			svc.DBConfigInfo = &v.BackupOptions.DBConfig
 			svc.DBConfigInfo.ServerDBConnection = v.BackupOptions.DBConfig.ServerDBConnection
+		case *structs.BackupSummaryFlags:
+			// Untuk summary command, tidak perlu BackupOptions karena langsung menggunakan config
+			svc.BackupOptions = &structs.BackupOptions{}
 		default:
 			// Unknown type: buat default kosong
 			svc.BackupInfo = &structs.BackupInfo{}
