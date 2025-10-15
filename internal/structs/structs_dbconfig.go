@@ -15,7 +15,7 @@ type DBConfigCreateFlags struct {
 
 // DBConfigInfo - Struct to hold database configuration information
 type DBConfigInfo struct {
-	ConfigName         string `flag:"config-name" env:"SFDB_CONFIG_NAME" default:"local_mariadb"`
+	ConfigName         string
 	ServerDBConnection ServerDBConnection
 	EncryptionKey      string `flag:"encryption-key" env:"SFDB_ENCRYPTION_KEY" default:""`
 	FileSize           string

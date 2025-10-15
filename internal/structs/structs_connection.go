@@ -11,7 +11,8 @@ type ServerDBConnection struct {
 	Port     int    `flag:"port" env:"SFDB_DB_PORT" default:"3306"`
 	User     string `flag:"user" env:"SFDB_DB_USER" default:"root"`
 	Password string `flag:"password" env:"SFDB_DB_PASSWORD" default:""`
-	Database string `flag:"database" env:"SFDB_DB_NAME" default:"testdb"`
+	Database string
+	Version  string // mariadb or mysql
 }
 
 // SourceDBConnection - Database source connection related flags
