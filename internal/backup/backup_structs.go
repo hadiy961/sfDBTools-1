@@ -81,3 +81,10 @@ type backupResult struct {
 	failed     []FailedDatabaseInfo
 	errors     []string
 }
+
+// jobResult adalah struct untuk mengirim hasil dari worker melalui channel.
+type jobResult struct {
+	info   DatabaseBackupInfo
+	err    error
+	dbName string // Diperlukan untuk logging error
+}

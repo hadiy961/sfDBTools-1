@@ -7,17 +7,18 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime" // Diperlukan untuk konkurensi
 	"sfDBTools/pkg/compress"
 	"sfDBTools/pkg/database"
 	"sfDBTools/pkg/encrypt"
 	"sfDBTools/pkg/ui"
 	"strings"
+	"sync" // Diperlukan untuk konkurensi
 	"time"
 )
 
 // ExecuteBackup adalah satu-satunya entry point untuk menjalankan proses backup.
-// Ia mengorkestrasi seluruh alur: setup, eksekusi, pengumpulan detail (opsional), dan pembuatan summary.
-// REFACTOR: Mengonsolidasikan semua fungsi Execute... menjadi satu entry point yang jelas.
+// Ia mengorkestrasi seluruh alur: setup, eksekusi, pengumpulan detail, dan pembuatan summary.
 func (s *Service) ExecuteBackup(ctx context.Context, client *database.Client, dbFiltered []string, backupMode string, collectDetails bool) error {
 	// 1. Setup konfigurasi backup
 	config, err := s.SetupBackupExecution()
@@ -35,7 +36,7 @@ func (s *Service) ExecuteBackup(ctx context.Context, client *database.Client, db
 		result = s.executeBackupCombined(ctx, config, dbFiltered)
 	}
 
-	// 3. (Opsional) Kumpulkan detail database jika diminta dan ada backup yang berhasil
+	// 3. (Opsional) Kumpulkan detail database jika diminta
 	var databaseDetails map[string]DatabaseDetailInfo
 	if collectDetails && len(result.successful) > 0 {
 		uniqueDBs := make(map[string]bool)
@@ -58,7 +59,7 @@ func (s *Service) ExecuteBackup(ctx context.Context, client *database.Client, db
 	}
 	s.DisplaySummaryTable(summary)
 
-	// 5. Kembalikan error jika ada database yang gagal di-backup
+	// 5. Kembalikan error jika ada kegagalan
 	if len(result.failed) > 0 {
 		var failedNames []string
 		for _, failed := range result.failed {
@@ -70,29 +71,58 @@ func (s *Service) ExecuteBackup(ctx context.Context, client *database.Client, db
 	return nil
 }
 
-// executeBackupSeparate melakukan backup dengan file terpisah per database.
-// REFACTOR: Disederhanakan, tidak lagi menerima pointer slice, tapi mengembalikan struct backupResult.
+// executeBackupSeparate melakukan backup dengan file terpisah per database secara paralel menggunakan worker pool.
 func (s *Service) executeBackupSeparate(ctx context.Context, config BackupConfig, dbFiltered []string) backupResult {
-	ui.PrintSubHeader("Proses Backup Database Terpisah")
-	s.Logger.Infof("Total database yang akan di-backup: %d", len(dbFiltered))
+	ui.PrintSubHeader("Proses Backup Database Terpisah (Mode Paralel)")
+	dbCount := len(dbFiltered)
+	s.Logger.Infof("Total database yang akan di-backup: %d", dbCount)
 
+	// Tentukan jumlah worker, idealnya sejumlah core CPU untuk efisiensi.
+	numWorkers := runtime.NumCPU()
+	if dbCount < numWorkers {
+		numWorkers = dbCount // Tidak perlu lebih banyak worker dari jumlah pekerjaan
+	}
+	s.Logger.Infof("Menggunakan %d worker untuk backup paralel.", numWorkers)
+
+	jobs := make(chan string, dbCount)
+	results := make(chan jobResult, dbCount)
+	var wg sync.WaitGroup
+
+	// Hidupkan worker (goroutine)
+	for w := 1; w <= numWorkers; w++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			for dbName := range jobs {
+				s.Logger.Infof("[Worker %d] Memproses database: %s", workerID, dbName)
+				info, err := s.backupSingleDatabase(ctx, config, dbName)
+				results <- jobResult{info: info, err: err, dbName: dbName}
+			}
+		}(w)
+	}
+
+	// Kirim pekerjaan ke worker
+	for _, dbName := range dbFiltered {
+		jobs <- dbName
+	}
+	close(jobs)
+
+	// Tunggu semua worker selesai
+	wg.Wait()
+	close(results)
+
+	// Kumpulkan hasil dari semua worker
 	var res backupResult
-
-	for i, dbName := range dbFiltered {
-		s.Logger.Infof("Memproses database [%d/%d]: %s", i+1, len(dbFiltered), dbName)
-
-		// REFACTOR: Logika untuk mem-backup satu DB diekstrak ke fungsi sendiri.
-		info, err := s.backupSingleDatabase(ctx, config, dbName)
-		if err != nil {
-			errorMsg := fmt.Sprintf("Gagal backup database %s: %v", dbName, err)
-			res.failed = append(res.failed, FailedDatabaseInfo{DatabaseName: dbName, Error: err.Error()})
+	for result := range results {
+		if result.err != nil {
+			errorMsg := fmt.Sprintf("Gagal backup database %s: %v", result.dbName, result.err)
+			res.failed = append(res.failed, FailedDatabaseInfo{DatabaseName: result.dbName, Error: result.err.Error()})
 			res.errors = append(res.errors, errorMsg)
 			s.Logger.Error(errorMsg)
-			continue
+		} else {
+			res.successful = append(res.successful, result.info)
+			s.Logger.Infof("Database %s berhasil di-backup ke: %s", result.info.DatabaseName, result.info.OutputFile)
 		}
-
-		res.successful = append(res.successful, info)
-		s.Logger.Infof("Database %s berhasil di-backup ke: %s", dbName, info.OutputFile)
 	}
 
 	s.Logger.Info("Proses backup database terpisah selesai.")
@@ -102,11 +132,9 @@ func (s *Service) executeBackupSeparate(ctx context.Context, config BackupConfig
 }
 
 // backupSingleDatabase menangani logika untuk membackup satu database.
-// REFACTOR: Fungsi baru hasil ekstraksi untuk meningkatkan keterbacaan dan reusability.
 func (s *Service) backupSingleDatabase(ctx context.Context, config BackupConfig, dbName string) (DatabaseBackupInfo, error) {
 	startTime := time.Now()
 
-	// Generate nama file
 	baseOutputFile, err := s.GenerateBackupFilename(dbName)
 	if err != nil {
 		return DatabaseBackupInfo{}, fmt.Errorf("gagal generate nama file: %w", err)
@@ -114,14 +142,12 @@ func (s *Service) backupSingleDatabase(ctx context.Context, config BackupConfig,
 	outputFile := s.addFileExtensions(baseOutputFile+".sql", config)
 	fullOutputPath := filepath.Join(config.OutputDir, outputFile)
 
-	// Siapkan dan jalankan mysqldump
 	mysqldumpArgs := s.buildMysqldumpArgs(config.BaseDumpArgs, nil, dbName)
 
 	if err := s.executeMysqldumpWithPipe(ctx, mysqldumpArgs, fullOutputPath, config.CompressionRequired, config.CompressionType); err != nil {
 		return DatabaseBackupInfo{}, err
 	}
 
-	// Kumpulkan informasi hasil backup
 	fileInfo, err := os.Stat(fullOutputPath)
 	var fileSize int64
 	if err == nil {
@@ -137,8 +163,7 @@ func (s *Service) backupSingleDatabase(ctx context.Context, config BackupConfig,
 	}, nil
 }
 
-// executeBackupCombined melakukan backup dengan satu file gabungan.
-// REFACTOR: Disederhanakan, mengembalikan struct backupResult.
+// executeBackupCombined melakukan backup dengan satu file gabungan (sekuensial).
 func (s *Service) executeBackupCombined(ctx context.Context, config BackupConfig, dbFiltered []string) backupResult {
 	ui.PrintSubHeader("Proses Backup Database Gabungan")
 	s.Logger.Info("Memulai proses backup...")
@@ -146,7 +171,6 @@ func (s *Service) executeBackupCombined(ctx context.Context, config BackupConfig
 	var res backupResult
 	backupStartTime := time.Now()
 
-	// Generate nama file
 	baseOutputFile, err := s.GenerateBackupFilename("all_databases")
 	if err != nil {
 		errorMsg := fmt.Errorf("gagal generate nama file backup: %w", err)
@@ -160,7 +184,6 @@ func (s *Service) executeBackupCombined(ctx context.Context, config BackupConfig
 	outputFile := s.addFileExtensions(baseOutputFile+".sql", config)
 	fullOutputPath := filepath.Join(config.OutputDir, outputFile)
 
-	// Siapkan dan jalankan mysqldump
 	mysqldumpArgs := s.buildMysqldumpArgs(config.BaseDumpArgs, dbFiltered, "")
 	s.Logger.Debug("Direktori output: " + config.OutputDir)
 	s.Logger.Debug("File output: " + fullOutputPath)
@@ -174,7 +197,6 @@ func (s *Service) executeBackupCombined(ctx context.Context, config BackupConfig
 		return res
 	}
 
-	// Kumpulkan informasi hasil backup
 	backupDuration := time.Since(backupStartTime)
 	fileInfo, err := os.Stat(fullOutputPath)
 	var fileSize int64
@@ -182,14 +204,13 @@ func (s *Service) executeBackupCombined(ctx context.Context, config BackupConfig
 		fileSize = fileInfo.Size()
 	}
 
-	// Buat entri untuk setiap database yang berhasil di-backup dalam satu file
 	for _, dbName := range dbFiltered {
 		res.successful = append(res.successful, DatabaseBackupInfo{
 			DatabaseName:  dbName,
 			OutputFile:    fullOutputPath,
-			FileSize:      fileSize, // Ukuran file sama untuk semua DB dalam mode ini
+			FileSize:      fileSize,
 			FileSizeHuman: s.FormatFileSize(fileSize),
-			Duration:      s.FormatDuration(backupDuration), // Durasi juga sama
+			Duration:      s.FormatDuration(backupDuration),
 		})
 	}
 
@@ -198,8 +219,7 @@ func (s *Service) executeBackupCombined(ctx context.Context, config BackupConfig
 	return res
 }
 
-// executeMysqldumpWithPipe menjalankan mysqldump dengan pipe ke file output.
-// (Fungsi ini sudah cukup baik dan tidak memerlukan perubahan signifikan).
+// executeMysqldumpWithPipe menjalankan mysqldump dengan pipe untuk kompresi dan enkripsi.
 func (s *Service) executeMysqldumpWithPipe(ctx context.Context, mysqldumpArgs []string, outputPath string, compressionRequired bool, compressionType string) error {
 	outputFile, err := os.Create(outputPath)
 	if err != nil {
@@ -210,11 +230,9 @@ func (s *Service) executeMysqldumpWithPipe(ctx context.Context, mysqldumpArgs []
 	var writer io.Writer = outputFile
 	var closers []io.Closer
 
-	// Setup enkripsi jika diperlukan (layer pertama: paling dalam)
-	// Urutan layer: File -> Encryption -> Compression -> mysqldump
+	// Urutan layer: mysqldump -> Compression -> Encryption -> File
 	if s.BackupOptions.Encryption.Enabled {
 		encryptionKey := s.BackupOptions.Encryption.Key
-
 		if encryptionKey == "" {
 			resolvedKey, source, err := encrypt.ResolveEncryptionKey("")
 			if err != nil {
@@ -230,26 +248,21 @@ func (s *Service) executeMysqldumpWithPipe(ctx context.Context, mysqldumpArgs []
 		}
 		closers = append(closers, encryptingWriter)
 		writer = encryptingWriter
-
 	}
 
-	// Setup kompresi jika diperlukan (layer kedua: di atas enkripsi)
 	if compressionRequired {
 		compressionConfig := compress.CompressionConfig{
 			Type:  compress.CompressionType(compressionType),
 			Level: compress.CompressionLevel(s.BackupOptions.Compression.Level),
 		}
-
 		compressingWriter, err := compress.NewCompressingWriter(writer, compressionConfig)
 		if err != nil {
 			return fmt.Errorf("gagal membuat compressing writer: %w", err)
 		}
 		closers = append(closers, compressingWriter)
 		writer = compressingWriter
-
 	}
 
-	// Defer semua closers dalam urutan terbalik
 	defer func() {
 		for i := len(closers) - 1; i >= 0; i-- {
 			if err := closers[i].Close(); err != nil {
@@ -258,7 +271,6 @@ func (s *Service) executeMysqldumpWithPipe(ctx context.Context, mysqldumpArgs []
 		}
 	}()
 
-	// Buat dan jalankan command mysqldump
 	cmd := exec.CommandContext(ctx, "mysqldump", mysqldumpArgs...)
 	cmd.Stdout = writer
 	cmd.Stderr = os.Stderr
