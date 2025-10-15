@@ -1,8 +1,8 @@
 // File : internal/backup/backup_summary.go
-// Deskripsi : Fungsi untuk membuat summary backup dalam format JSON dan table
+// Deskripsi : Fungsi untuk membuat, menyimpan, dan menampilkan summary backup.
 // Author : Hadiyatna Muflihun
 // Tanggal : 15 Oktober 2025
-// Last Modified : 15 Oktober 2025
+// Last Modified : 15 Oktober 2025 (Refactored for clarity and best practices)
 
 package backup
 
@@ -11,250 +11,111 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sfDBTools/pkg/ui"
+	"sfDBTools/pkg/ui" // <-- Menggunakan package UI Anda
 	"time"
 
 	"github.com/dustin/go-humanize"
 )
 
-// BackupSummary adalah struktur untuk menyimpan summary backup
-type BackupSummary struct {
-	// Informasi umum backup
-	BackupID   string    `json:"backup_id"`
-	Timestamp  time.Time `json:"timestamp"`
-	BackupMode string    `json:"backup_mode"` // "separate" atau "combined"
-	Status     string    `json:"status"`      // "success", "partial", "failed"
-	Duration   string    `json:"duration"`
-	StartTime  time.Time `json:"start_time"`
-	EndTime    time.Time `json:"end_time"`
+const (
+	// backupIDTimeFormat adalah format waktu yang digunakan untuk generate Backup ID.
+	backupIDTimeFormat = "20060102_150405"
+	// displayTimeFormat adalah format waktu yang mudah dibaca untuk ditampilkan di summary.
+	displayTimeFormat = "2006-01-02 15:04:05"
+)
 
-	// Informasi database
-	DatabaseStats DatabaseSummaryStats `json:"database_stats"`
-
-	// Informasi file output
-	OutputInfo OutputSummaryInfo `json:"output_info"`
-
-	// Konfigurasi backup
-	BackupConfig BackupConfigSummary `json:"backup_config"`
-
-	// Database yang berhasil dan gagal
-	SuccessfulDatabases []DatabaseBackupInfo `json:"successful_databases"`
-	FailedDatabases     []FailedDatabaseInfo `json:"failed_databases"`
-
-	// Detail database info
-	DatabaseDetails map[string]DatabaseDetailInfo `json:"database_details,omitempty"` // Detail informasi setiap database
-
-	// Informasi error (jika ada)
-	Errors []string `json:"errors,omitempty"`
-}
-
-// DatabaseSummaryStats berisi statistik database
-type DatabaseSummaryStats struct {
-	TotalDatabases    int `json:"total_databases"`
-	SuccessfulBackups int `json:"successful_backups"`
-	FailedBackups     int `json:"failed_backups"`
-	ExcludedDatabases int `json:"excluded_databases"`
-	SystemDatabases   int `json:"system_databases"`
-	FilteredDatabases int `json:"filtered_databases"`
-}
-
-// OutputSummaryInfo berisi informasi file output
-type OutputSummaryInfo struct {
-	OutputDirectory string            `json:"output_directory"`
-	TotalFiles      int               `json:"total_files"`
-	TotalSize       int64             `json:"total_size_bytes"`
-	TotalSizeHuman  string            `json:"total_size_human"`
-	Files           []SummaryFileInfo `json:"files"`
-}
-
-// BackupConfigSummary berisi ringkasan konfigurasi backup
-type BackupConfigSummary struct {
-	CompressionEnabled bool   `json:"compression_enabled"`
-	CompressionType    string `json:"compression_type,omitempty"`
-	CompressionLevel   string `json:"compression_level,omitempty"`
-	EncryptionEnabled  bool   `json:"encryption_enabled"`
-	DBListFile         string `json:"db_list_file,omitempty"`
-	CleanupEnabled     bool   `json:"cleanup_enabled"`
-	RetentionDays      int    `json:"retention_days,omitempty"`
-}
-
-// DatabaseBackupInfo berisi informasi database yang berhasil dibackup
-type DatabaseBackupInfo struct {
-	DatabaseName  string              `json:"database_name"`
-	OutputFile    string              `json:"output_file"`
-	FileSize      int64               `json:"file_size_bytes"`
-	FileSizeHuman string              `json:"file_size_human"`
-	Duration      string              `json:"duration"`
-	DetailInfo    *DatabaseDetailInfo `json:"detail_info,omitempty"` // Informasi detail database
-}
-
-// FailedDatabaseInfo berisi informasi database yang gagal dibackup
-type FailedDatabaseInfo struct {
-	DatabaseName string `json:"database_name"`
-	Error        string `json:"error"`
-}
-
-// SummaryFileInfo berisi informasi file backup untuk summary (berbeda dari BackupFileInfo di cleanup)
-type SummaryFileInfo struct {
-	FileName     string    `json:"file_name"`
-	FilePath     string    `json:"file_path"`
-	Size         int64     `json:"size_bytes"`
-	SizeHuman    string    `json:"size_human"`
-	DatabaseName string    `json:"database_name,omitempty"`
-	CreatedAt    time.Time `json:"created_at"`
-}
-
-// CreateBackupSummaryWithDetails membuat summary backup dengan detail database
-func (s *Service) CreateBackupSummaryWithDetails(backupMode string, dbFiltered []string, successfulDBs []DatabaseBackupInfo, failedDBs []FailedDatabaseInfo, startTime time.Time, errors []string, databaseDetails map[string]DatabaseDetailInfo) *BackupSummary {
+// CreateBackupSummary membuat summary backup yang komprehensif.
+// Fungsi ini menggabungkan pembuatan summary dengan atau tanpa detail database untuk mengurangi duplikasi kode.
+// Jika detail database tidak tersedia, pass `nil` pada parameter `databaseDetails`.
+func (s *Service) CreateBackupSummary(
+	backupMode string,
+	dbFiltered []string,
+	successfulDBs []DatabaseBackupInfo,
+	failedDBs []FailedDatabaseInfo,
+	startTime time.Time,
+	errors []string,
+	databaseDetails map[string]DatabaseDetailInfo,
+) *BackupSummary {
 	endTime := time.Now()
-	duration := endTime.Sub(startTime)
 
-	// Generate backup ID
-	backupID := fmt.Sprintf("backup_%s", startTime.Format("20060102_150405"))
-
-	// Tentukan status backup
-	status := "success"
-	if len(failedDBs) > 0 {
-		if len(successfulDBs) > 0 {
-			status = "partial"
-		} else {
-			status = "failed"
-		}
+	// Tentukan status backup berdasarkan hasil
+	var status string
+	switch {
+	case len(failedDBs) == 0 && len(successfulDBs) > 0:
+		status = "success"
+	case len(failedDBs) > 0 && len(successfulDBs) > 0:
+		status = "partial"
+	case len(failedDBs) > 0 && len(successfulDBs) == 0:
+		status = "failed"
+	default:
+		status = "empty" // Tidak ada database yang diproses
 	}
 
-	// Hitung statistik database
-	dbStats := DatabaseSummaryStats{
+	return &BackupSummary{
+		BackupID:            fmt.Sprintf("backup_%s", startTime.Format(backupIDTimeFormat)),
+		Timestamp:           startTime,
+		BackupMode:          backupMode,
+		Status:              status,
+		Duration:            s.formatDuration(endTime.Sub(startTime)),
+		StartTime:           startTime,
+		EndTime:             endTime,
+		DatabaseStats:       s.buildDatabaseStats(dbFiltered, successfulDBs, failedDBs),
+		OutputInfo:          s.collectOutputInfo(successfulDBs),
+		BackupConfig:        s.buildBackupConfigSummary(),
+		SuccessfulDatabases: successfulDBs,
+		FailedDatabases:     failedDBs,
+		DatabaseDetails:     databaseDetails,
+		ServerInfo: ServerConnectionInfo{
+			Host:     s.DBConfigInfo.ServerDBConnection.Host,
+			Port:     s.DBConfigInfo.ServerDBConnection.Port,
+			User:     s.DBConfigInfo.ServerDBConnection.User,
+			Database: s.DBConfigInfo.ServerDBConnection.Database,
+			Config:   s.DBConfigInfo.ConfigName,
+		},
+		Errors: errors,
+	}
+}
+
+// buildDatabaseStats membuat statistik database.
+func (s *Service) buildDatabaseStats(dbFiltered []string, successfulDBs []DatabaseBackupInfo, failedDBs []FailedDatabaseInfo) DatabaseSummaryStats {
+	stats := DatabaseSummaryStats{
 		TotalDatabases:    len(dbFiltered),
 		SuccessfulBackups: len(successfulDBs),
 		FailedBackups:     len(failedDBs),
 	}
-
-	// Tambahkan informasi filter jika ada
 	if s.FilterInfo != nil {
-		dbStats.ExcludedDatabases = s.FilterInfo.ExcludedDatabases
-		dbStats.SystemDatabases = s.FilterInfo.SystemDatabases
-		dbStats.FilteredDatabases = s.FilterInfo.IncludedDatabases
+		stats.ExcludedDatabases = s.FilterInfo.ExcludedDatabases
+		stats.SystemDatabases = s.FilterInfo.SystemDatabases
+		stats.FilteredDatabases = s.FilterInfo.IncludedDatabases
 	}
+	return stats
+}
 
-	// Kumpulkan informasi file output
-	outputInfo := s.collectOutputInfo(successfulDBs)
-
-	// Buat ringkasan konfigurasi backup
-	backupConfig := BackupConfigSummary{
+// buildBackupConfigSummary membuat ringkasan konfigurasi dari state Service.
+func (s *Service) buildBackupConfigSummary() BackupConfigSummary {
+	cfg := BackupConfigSummary{
 		CompressionEnabled: s.BackupOptions.Compression.Enabled,
 		EncryptionEnabled:  s.BackupOptions.Encryption.Enabled,
 		CleanupEnabled:     s.BackupOptions.Cleanup.Enabled,
 	}
 
-	if s.BackupOptions.Compression.Enabled {
-		backupConfig.CompressionType = s.BackupOptions.Compression.Type
-		backupConfig.CompressionLevel = s.BackupOptions.Compression.Level
+	if cfg.CompressionEnabled {
+		cfg.CompressionType = s.BackupOptions.Compression.Type
+		cfg.CompressionLevel = s.BackupOptions.Compression.Level
 	}
-
 	if s.BackupOptions.DBList != "" {
-		backupConfig.DBListFile = s.BackupOptions.DBList
+		cfg.DBListFile = s.BackupOptions.DBList
 	}
-
-	if s.BackupOptions.Cleanup.Enabled {
-		backupConfig.RetentionDays = s.BackupOptions.Cleanup.RetentionDays
+	if cfg.CleanupEnabled {
+		cfg.RetentionDays = s.BackupOptions.Cleanup.RetentionDays
 	}
-
-	return &BackupSummary{
-		BackupID:            backupID,
-		Timestamp:           startTime,
-		BackupMode:          backupMode,
-		Status:              status,
-		Duration:            formatDuration(duration),
-		StartTime:           startTime,
-		EndTime:             endTime,
-		DatabaseStats:       dbStats,
-		OutputInfo:          outputInfo,
-		BackupConfig:        backupConfig,
-		SuccessfulDatabases: successfulDBs,
-		FailedDatabases:     failedDBs,
-		DatabaseDetails:     databaseDetails, // Tambahkan detail database
-		Errors:              errors,
-	}
+	return cfg
 }
 
-// CreateBackupSummary membuat summary backup
-func (s *Service) CreateBackupSummary(backupMode string, dbFiltered []string, successfulDBs []DatabaseBackupInfo, failedDBs []FailedDatabaseInfo, startTime time.Time, errors []string) *BackupSummary {
-	endTime := time.Now()
-	duration := endTime.Sub(startTime)
-
-	// Generate backup ID
-	backupID := fmt.Sprintf("backup_%s", startTime.Format("20060102_150405"))
-
-	// Tentukan status backup
-	status := "success"
-	if len(failedDBs) > 0 {
-		if len(successfulDBs) > 0 {
-			status = "partial"
-		} else {
-			status = "failed"
-		}
-	}
-
-	// Hitung statistik database
-	dbStats := DatabaseSummaryStats{
-		TotalDatabases:    len(dbFiltered),
-		SuccessfulBackups: len(successfulDBs),
-		FailedBackups:     len(failedDBs),
-	}
-
-	// Tambahkan informasi filter jika ada
-	if s.FilterInfo != nil {
-		dbStats.ExcludedDatabases = s.FilterInfo.ExcludedDatabases
-		dbStats.SystemDatabases = s.FilterInfo.SystemDatabases
-		dbStats.FilteredDatabases = s.FilterInfo.IncludedDatabases
-	}
-
-	// Kumpulkan informasi file output
-	outputInfo := s.collectOutputInfo(successfulDBs)
-
-	// Buat ringkasan konfigurasi backup
-	backupConfig := BackupConfigSummary{
-		CompressionEnabled: s.BackupOptions.Compression.Enabled,
-		EncryptionEnabled:  s.BackupOptions.Encryption.Enabled,
-		CleanupEnabled:     s.BackupOptions.Cleanup.Enabled,
-	}
-
-	if s.BackupOptions.Compression.Enabled {
-		backupConfig.CompressionType = s.BackupOptions.Compression.Type
-		backupConfig.CompressionLevel = s.BackupOptions.Compression.Level
-	}
-
-	if s.BackupOptions.DBList != "" {
-		backupConfig.DBListFile = s.BackupOptions.DBList
-	}
-
-	if s.BackupOptions.Cleanup.Enabled {
-		backupConfig.RetentionDays = s.BackupOptions.Cleanup.RetentionDays
-	}
-
-	return &BackupSummary{
-		BackupID:            backupID,
-		Timestamp:           startTime,
-		BackupMode:          backupMode,
-		Status:              status,
-		Duration:            formatDuration(duration),
-		StartTime:           startTime,
-		EndTime:             endTime,
-		DatabaseStats:       dbStats,
-		OutputInfo:          outputInfo,
-		BackupConfig:        backupConfig,
-		SuccessfulDatabases: successfulDBs,
-		FailedDatabases:     failedDBs,
-		Errors:              errors,
-	}
-}
-
-// collectOutputInfo mengumpulkan informasi file output
+// collectOutputInfo mengumpulkan informasi file output dari backup yang berhasil.
 func (s *Service) collectOutputInfo(successfulDBs []DatabaseBackupInfo) OutputSummaryInfo {
 	var files []SummaryFileInfo
 	var totalSize int64
-
-	outputDir := s.BackupOptions.OutputDirectory
 
 	for _, db := range successfulDBs {
 		fileInfo := SummaryFileInfo{
@@ -263,41 +124,37 @@ func (s *Service) collectOutputInfo(successfulDBs []DatabaseBackupInfo) OutputSu
 			Size:         db.FileSize,
 			SizeHuman:    db.FileSizeHuman,
 			DatabaseName: db.DatabaseName,
-			CreatedAt:    time.Now(), // Bisa diambil dari file stat jika perlu akurat
+			CreatedAt:    time.Now(),
 		}
 		files = append(files, fileInfo)
 		totalSize += db.FileSize
 	}
 
 	return OutputSummaryInfo{
-		OutputDirectory: outputDir,
+		OutputDirectory: s.BackupOptions.OutputDirectory,
 		TotalFiles:      len(files),
 		TotalSize:       totalSize,
-		TotalSizeHuman:  formatFileSize(totalSize),
+		TotalSizeHuman:  humanize.Bytes(uint64(totalSize)),
 		Files:           files,
 	}
 }
 
-// SaveSummaryToJSON menyimpan summary ke file JSON
+// SaveSummaryToJSON menyimpan summary ke file JSON.
 func (s *Service) SaveSummaryToJSON(summary *BackupSummary) error {
-	// Gunakan base directory dari config untuk summary
 	baseDirectory := s.Config.Backup.Output.BaseDirectory
 	summaryDir := filepath.Join(baseDirectory, "summaries")
 	if err := os.MkdirAll(summaryDir, 0755); err != nil {
 		return fmt.Errorf("gagal membuat direktori summary: %w", err)
 	}
 
-	// Generate nama file summary
 	summaryFileName := fmt.Sprintf("%s.json", summary.BackupID)
 	summaryPath := filepath.Join(summaryDir, summaryFileName)
 
-	// Convert ke JSON dengan indentasi
 	jsonData, err := json.MarshalIndent(summary, "", "  ")
 	if err != nil {
 		return fmt.Errorf("gagal marshal summary ke JSON: %w", err)
 	}
 
-	// Tulis ke file
 	if err := os.WriteFile(summaryPath, jsonData, 0644); err != nil {
 		return fmt.Errorf("gagal menulis file summary: %w", err)
 	}
@@ -306,189 +163,169 @@ func (s *Service) SaveSummaryToJSON(summary *BackupSummary) error {
 	return nil
 }
 
-// DisplaySummaryTable menampilkan summary dalam format table
+// DisplaySummaryTable adalah "controller" yang mengatur tampilan summary.
 func (s *Service) DisplaySummaryTable(summary *BackupSummary) {
-	ui.PrintHeader("BACKUP SUMMARY")
+	ui.Headers("BACKUP SUMMARY") // <-- Menggunakan ui.PrintHeader
 
-	// Tabel informasi umum
-	fmt.Println("📊 Informasi Umum:")
-	generalHeaders := []string{"Property", "Value"}
-	generalRows := [][]string{
+	s.displayGeneralInfo(summary)
+	s.displayServerInfo(summary)
+	s.displayDBStats(summary)
+	s.displayOutputInfo(summary)
+	s.displayConfig(summary)
+	s.displaySuccessfulDBs(summary)
+	s.displayDatabaseDetails(summary)
+	s.displayFailedDBs(summary)
+	s.displayErrors(summary)
+}
+
+// Masing-masing fungsi di bawah ini sekarang hanya bertanggung jawab untuk SATU tabel.
+
+func (s *Service) displayGeneralInfo(summary *BackupSummary) {
+	ui.PrintSubHeader("Informasi Umum")
+	data := [][]string{
 		{"Backup ID", summary.BackupID},
-		{"Status", getStatusIcon(summary.Status) + " " + summary.Status},
+		{"Status", ui.GetStatusIcon(summary.Status) + " " + summary.Status}, // <-- Menggunakan ui.GetStatusIcon
 		{"Mode", summary.BackupMode},
-		{"Waktu Mulai", summary.StartTime.Format("2006-01-02 15:04:05")},
-		{"Waktu Selesai", summary.EndTime.Format("2006-01-02 15:04:05")},
+		{"Waktu Mulai", summary.StartTime.Format(displayTimeFormat)},
+		{"Waktu Selesai", summary.EndTime.Format(displayTimeFormat)},
 		{"Durasi", summary.Duration},
 	}
-	ui.FormatTable(generalHeaders, generalRows)
-	fmt.Println()
+	ui.FormatTable([]string{"Property", "Value"}, data)
+}
 
-	// Tabel statistik database
-	fmt.Println("🗄️  Statistik Database:")
-	dbStatsHeaders := []string{"Metric", "Count"}
-	dbStatsRows := [][]string{
+func (s *Service) displayDBStats(summary *BackupSummary) {
+	ui.PrintSubHeader("Statistik Database")
+	data := [][]string{
 		{"Total Database", fmt.Sprintf("%d", summary.DatabaseStats.TotalDatabases)},
 		{"Berhasil", fmt.Sprintf("✅ %d", summary.DatabaseStats.SuccessfulBackups)},
 		{"Gagal", fmt.Sprintf("❌ %d", summary.DatabaseStats.FailedBackups)},
 	}
 	if summary.DatabaseStats.ExcludedDatabases > 0 {
-		dbStatsRows = append(dbStatsRows, []string{"Dikecualikan", fmt.Sprintf("⚠️ %d", summary.DatabaseStats.ExcludedDatabases)})
+		data = append(data, []string{"Dikecualikan", fmt.Sprintf("⚠️ %d", summary.DatabaseStats.ExcludedDatabases)})
 	}
-	ui.FormatTable(dbStatsHeaders, dbStatsRows)
-	fmt.Println()
+	ui.FormatTable([]string{"Metric", "Count"}, data)
+}
 
-	// Tabel informasi file output
-	fmt.Println("📁 Output Files:")
-	outputHeaders := []string{"Property", "Value"}
-	outputRows := [][]string{
+// displayServerInfo menampilkan informasi server database (tanpa password)
+func (s *Service) displayServerInfo(summary *BackupSummary) {
+	// Jika tidak ada info server yang tersedia, lewati
+	if summary.ServerInfo.Host == "" && summary.ServerInfo.User == "" && summary.ServerInfo.Port == 0 {
+		return
+	}
+	ui.PrintSubHeader("Informasi Server")
+	data := [][]string{
+		{"Host", summary.ServerInfo.Host},
+		{"Port", fmt.Sprintf("%d", summary.ServerInfo.Port)},
+		{"User", summary.ServerInfo.User},
+	}
+	if summary.ServerInfo.Database != "" {
+		data = append(data, []string{"Database", summary.ServerInfo.Database})
+	}
+	if summary.ServerInfo.Config != "" {
+		data = append(data, []string{"Config", summary.ServerInfo.Config})
+	}
+	ui.FormatTable([]string{"Property", "Value"}, data)
+}
+
+func (s *Service) displayOutputInfo(summary *BackupSummary) {
+	ui.PrintSubHeader("Output Files")
+	data := [][]string{
 		{"Direktori Output", summary.OutputInfo.OutputDirectory},
 		{"Total File", fmt.Sprintf("%d", summary.OutputInfo.TotalFiles)},
 		{"Total Ukuran", summary.OutputInfo.TotalSizeHuman},
 	}
-	ui.FormatTable(outputHeaders, outputRows)
-	fmt.Println()
+	ui.FormatTable([]string{"Property", "Value"}, data)
+}
 
-	// Tabel konfigurasi backup
-	fmt.Println("⚙️  Konfigurasi Backup:")
-	configHeaders := []string{"Fitur", "Status", "Detail"}
-	var configRows [][]string
-
-	// Kompresi
-	compressionStatus := "❌ Disabled"
-	compressionDetail := "-"
+func (s *Service) displayConfig(summary *BackupSummary) {
+	ui.PrintSubHeader("Konfigurasi Backup")
+	var compressionStatus, compressionDetail = "❌ Disabled", "-"
 	if summary.BackupConfig.CompressionEnabled {
 		compressionStatus = "✅ Enabled"
 		compressionDetail = fmt.Sprintf("%s (level: %s)", summary.BackupConfig.CompressionType, summary.BackupConfig.CompressionLevel)
 	}
-	configRows = append(configRows, []string{"Kompresi", compressionStatus, compressionDetail})
-
-	// Enkripsi
-	encryptionStatus := "❌ Disabled"
-	encryptionDetail := "-"
+	var encryptionStatus, encryptionDetail = "❌ Disabled", "-"
 	if summary.BackupConfig.EncryptionEnabled {
 		encryptionStatus = "✅ Enabled"
 		encryptionDetail = "AES-256-GCM"
 	}
-	configRows = append(configRows, []string{"Enkripsi", encryptionStatus, encryptionDetail})
-
-	// Cleanup
-	cleanupStatus := "❌ Disabled"
-	cleanupDetail := "-"
+	var cleanupStatus, cleanupDetail = "❌ Disabled", "-"
 	if summary.BackupConfig.CleanupEnabled {
 		cleanupStatus = "✅ Enabled"
 		cleanupDetail = fmt.Sprintf("%d hari", summary.BackupConfig.RetentionDays)
 	}
-	configRows = append(configRows, []string{"Auto Cleanup", cleanupStatus, cleanupDetail})
+	data := [][]string{
+		{"Kompresi", compressionStatus, compressionDetail},
+		{"Enkripsi", encryptionStatus, encryptionDetail},
+		{"Auto Cleanup", cleanupStatus, cleanupDetail},
+	}
+	ui.FormatTable([]string{"Fitur", "Status", "Detail"}, data)
+}
 
-	ui.FormatTable(configHeaders, configRows)
-	fmt.Println()
+func (s *Service) displaySuccessfulDBs(summary *BackupSummary) {
+	if len(summary.SuccessfulDatabases) == 0 {
+		return
+	}
+	ui.PrintSubHeader("Database Berhasil")
+	var data [][]string
+	for _, db := range summary.SuccessfulDatabases {
+		data = append(data, []string{db.DatabaseName, filepath.Base(db.OutputFile), db.FileSizeHuman, db.Duration})
+	}
+	ui.FormatTable([]string{"Database", "File Output", "Ukuran", "Durasi"}, data)
+}
 
-	// Tabel database yang berhasil (jika ada)
-	if len(summary.SuccessfulDatabases) > 0 {
-		fmt.Println("✅ Database Berhasil:")
-		successHeaders := []string{"Database", "File Output", "Ukuran", "Durasi"}
-		var successRows [][]string
-
-		for _, db := range summary.SuccessfulDatabases {
-			successRows = append(successRows, []string{
-				db.DatabaseName,
-				filepath.Base(db.OutputFile),
-				db.FileSizeHuman,
-				db.Duration,
+func (s *Service) displayDatabaseDetails(summary *BackupSummary) {
+	if len(summary.DatabaseDetails) == 0 {
+		return
+	}
+	ui.PrintSubHeader("Detail Database")
+	var data [][]string
+	for _, db := range summary.SuccessfulDatabases {
+		if detail, exists := summary.DatabaseDetails[db.DatabaseName]; exists {
+			data = append(data, []string{
+				detail.DatabaseName, detail.SizeHuman, fmt.Sprintf("%d", detail.TableCount),
+				fmt.Sprintf("%d", detail.ViewCount), fmt.Sprintf("%d", detail.ProcedureCount),
+				fmt.Sprintf("%d", detail.FunctionCount), fmt.Sprintf("%d", detail.UserGrantCount),
 			})
 		}
-		ui.FormatTable(successHeaders, successRows)
-		fmt.Println()
 	}
-
-	// Tabel detail database (jika ada informasi detail)
-	if len(summary.DatabaseDetails) > 0 {
-		fmt.Println("📊 Detail Database:")
-		detailHeaders := []string{"Database", "DB Size", "Tables", "Views", "Procs", "Funcs", "Users"}
-		var detailRows [][]string
-
-		for _, db := range summary.SuccessfulDatabases {
-			if detail, exists := summary.DatabaseDetails[db.DatabaseName]; exists {
-				detailRows = append(detailRows, []string{
-					detail.DatabaseName,
-					detail.SizeHuman,
-					fmt.Sprintf("%d", detail.TableCount),
-					fmt.Sprintf("%d", detail.ViewCount),
-					fmt.Sprintf("%d", detail.ProcedureCount),
-					fmt.Sprintf("%d", detail.FunctionCount),
-					fmt.Sprintf("%d", detail.UserGrantCount),
-				})
-			}
-		}
-
-		if len(detailRows) > 0 {
-			ui.FormatTable(detailHeaders, detailRows)
-			fmt.Println()
-		}
-	}
-
-	// Tabel database yang gagal (jika ada)
-	if len(summary.FailedDatabases) > 0 {
-		fmt.Println("❌ Database Gagal:")
-		failedHeaders := []string{"Database", "Error"}
-		var failedRows [][]string
-
-		for _, db := range summary.FailedDatabases {
-			failedRows = append(failedRows, []string{db.DatabaseName, db.Error})
-		}
-		ui.FormatTable(failedHeaders, failedRows)
-		fmt.Println()
-	}
-
-	// Tampilkan error umum (jika ada)
-	if len(summary.Errors) > 0 {
-		fmt.Println("⚠️  Error Umum:")
-		for _, err := range summary.Errors {
-			fmt.Printf("   • %s\n", err)
-		}
-		fmt.Println()
+	if len(data) > 0 {
+		ui.FormatTable([]string{"Database", "DB Size", "Tables", "Views", "Procs", "Funcs", "Users"}, data)
 	}
 }
 
-// Helper functions
-
-// getStatusIcon mengembalikan icon untuk status
-func getStatusIcon(status string) string {
-	switch status {
-	case "success":
-		return "✅"
-	case "partial":
-		return "⚠️"
-	case "failed":
-		return "❌"
-	default:
-		return "❓"
+func (s *Service) displayFailedDBs(summary *BackupSummary) {
+	if len(summary.FailedDatabases) == 0 {
+		return
 	}
+	ui.PrintSubHeader("Database Gagal")
+	var data [][]string
+	for _, db := range summary.FailedDatabases {
+		data = append(data, []string{db.DatabaseName, db.Error})
+	}
+	ui.FormatTable([]string{"Database", "Error"}, data)
 }
 
-// formatDuration memformat durasi menjadi string yang mudah dibaca
-func formatDuration(duration time.Duration) string {
-	if duration < time.Minute {
+func (s *Service) displayErrors(summary *BackupSummary) {
+	if len(summary.Errors) == 0 {
+		return
+	}
+	ui.PrintSubHeader("Error Umum")
+	for _, err := range summary.Errors {
+		ui.PrintColoredLine("   • "+err, ui.ColorYellow)
+	}
+	fmt.Println()
+}
+
+// formatDuration memformat durasi menjadi string yang mudah dibaca.
+// Fungsi ini tetap private karena hanya relevan untuk package ini.
+func (s *Service) formatDuration(duration time.Duration) string {
+	switch {
+	case duration < time.Minute:
 		return fmt.Sprintf("%.1f detik", duration.Seconds())
-	} else if duration < time.Hour {
+	case duration < time.Hour:
 		return fmt.Sprintf("%.1f menit", duration.Minutes())
-	} else {
+	default:
 		return fmt.Sprintf("%.1f jam", duration.Hours())
 	}
-}
-
-// formatFileSize memformat ukuran file menjadi string yang mudah dibaca
-func formatFileSize(bytes int64) string {
-	return humanize.Bytes(uint64(bytes))
-}
-
-// FormatFileSize adalah wrapper untuk formatFileSize agar bisa dipanggil dari luar
-func (s *Service) FormatFileSize(bytes int64) string {
-	return formatFileSize(bytes)
-}
-
-// FormatDuration adalah wrapper untuk formatDuration agar bisa dipanggil dari luar
-func (s *Service) FormatDuration(duration time.Duration) string {
-	return formatDuration(duration)
 }

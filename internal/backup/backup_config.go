@@ -1,3 +1,9 @@
+// File: internal/backup/backup_config.go
+// Deskripsi : Fungsi untuk memuat dan menampilkan konfigurasi koneksi database
+// Author : Hadiyatna Muflihun
+// Tanggal : 2024-10-15
+// Last Modified : 2024-10-15
+
 package backup
 
 import (

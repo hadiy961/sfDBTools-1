@@ -53,7 +53,7 @@ func (s *Service) ExecuteBackup(ctx context.Context, client *database.Client, db
 	}
 
 	// 4. Buat, simpan, dan tampilkan summary
-	summary := s.CreateBackupSummaryWithDetails(backupMode, dbFiltered, result.successful, result.failed, startTime, result.errors, databaseDetails)
+	summary := s.CreateBackupSummary(backupMode, dbFiltered, result.successful, result.failed, startTime, result.errors, databaseDetails)
 	if err := s.SaveSummaryToJSON(summary); err != nil {
 		s.Logger.Errorf("Gagal menyimpan summary ke JSON: %v", err)
 	}
@@ -158,8 +158,8 @@ func (s *Service) backupSingleDatabase(ctx context.Context, config BackupConfig,
 		DatabaseName:  dbName,
 		OutputFile:    fullOutputPath,
 		FileSize:      fileSize,
-		FileSizeHuman: s.FormatFileSize(fileSize),
-		Duration:      s.FormatDuration(time.Since(startTime)),
+		FileSizeHuman: s.formatFileSize(fileSize),
+		Duration:      s.formatDuration(time.Since(startTime)),
 	}, nil
 }
 
@@ -209,8 +209,8 @@ func (s *Service) executeBackupCombined(ctx context.Context, config BackupConfig
 			DatabaseName:  dbName,
 			OutputFile:    fullOutputPath,
 			FileSize:      fileSize,
-			FileSizeHuman: s.FormatFileSize(fileSize),
-			Duration:      s.FormatDuration(backupDuration),
+			FileSizeHuman: s.formatFileSize(fileSize),
+			Duration:      s.formatDuration(backupDuration),
 		})
 	}
 

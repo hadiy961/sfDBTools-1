@@ -116,7 +116,7 @@ func (s *Service) ListAvailableSummaries() error {
 	var rows [][]string
 
 	for _, entry := range summaryFiles {
-		statusIcon := getStatusIcon(entry.Status)
+		statusIcon := ui.GetStatusIcon(entry.Status)
 		dbInfo := fmt.Sprintf("%d/%d", entry.DatabaseCount, entry.FailedCount)
 
 		rows = append(rows, []string{

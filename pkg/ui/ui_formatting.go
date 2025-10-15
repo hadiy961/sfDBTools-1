@@ -102,22 +102,24 @@ func FormatTable(headers []string, rows [][]string) {
 	table := tablewriter.NewWriter(os.Stdout)
 
 	// Set table headers using the correct method
-	headerInterface := make([]interface{}, len(headers))
-	for i, v := range headers {
-		headerInterface[i] = v
-	}
-	table.Header(headerInterface...)
+	table.Header(headers)
 
-	// Add all rows
-	for _, row := range rows {
-		// Convert row to interface slice
-		rowInterface := make([]interface{}, len(row))
-		for i, v := range row {
-			rowInterface[i] = v
-		}
-		table.Append(rowInterface...)
-	}
+	table.Bulk(rows)
 
 	// Render the table
 	table.Render()
+}
+
+// getStatusIcon mengembalikan icon untuk status
+func GetStatusIcon(status string) string {
+	switch status {
+	case "success":
+		return "✅"
+	case "partial":
+		return "⚠️"
+	case "failed":
+		return "❌"
+	default:
+		return "❓"
+	}
 }
