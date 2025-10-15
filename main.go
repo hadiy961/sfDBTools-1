@@ -34,13 +34,11 @@ func main() {
 		appLogger.Warn(fmt.Sprintf("Gagal menginisialisasi koneksi database: %v", err))
 		appLogger.Info("Aplikasi akan berjalan tanpa koneksi database aktif")
 	} else {
-		appLogger.Info("Koneksi database berhasil diinisialisasi")
 		// Tutup koneksi database saat aplikasi selesai
 		defer func() {
 			if closeErr := dbClient.Close(); closeErr != nil {
 				appLogger.Warn(fmt.Sprintf("Gagal menutup koneksi database: %v", closeErr))
 			} else {
-				appLogger.Info("Koneksi database berhasil ditutup")
 			}
 		}()
 	}

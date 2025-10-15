@@ -8,6 +8,7 @@ package cmd
 import (
 	"fmt"
 	"sfDBTools/pkg/globals"
+	"sfDBTools/pkg/ui"
 
 	"github.com/spf13/cobra"
 )
@@ -20,17 +21,14 @@ var versionCmd = &cobra.Command{
 
 		// Akses Config dan Logger melalui package globals
 		cfg := globals.GetConfig()
-		logger := globals.GetLogger()
+		// logger := globals.GetLogger()
 
 		if cfg == nil {
 			fmt.Println("Gagal mendapatkan konfigurasi.")
 			return
 		}
-
-		// Log pesan menggunakan logger yang sudah di-parsing
-		logger.Infof("Menampilkan versi untuk %s", cfg.General.AppName)
-
-		fmt.Printf("%s v%s\n", cfg.General.AppName, cfg.General.Version)
-		fmt.Printf("Kode Klien: %s\n", cfg.General.ClientCode)
+		ui.Headers("Versi Aplikasi")
+		ui.PrintInfo(cfg.General.AppName + " v" + cfg.General.Version)
+		ui.PrintInfo("Kode Klien: " + cfg.General.ClientCode)
 	},
 }
