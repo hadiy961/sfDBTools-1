@@ -10,6 +10,7 @@ import (
 	"os"
 	"sfDBTools/cmd/backup_cmd"
 	"sfDBTools/cmd/dbconfig_cmd"
+	"sfDBTools/cmd/dbscan_cmd"
 	"sfDBTools/cmd/encrypt_cmd"
 	"sfDBTools/pkg/globals"
 
@@ -64,4 +65,5 @@ func init() {
 	rootCmd.AddCommand(dbconfig_cmd.DBConfigMainCMD)
 	rootCmd.AddCommand(backup_cmd.BackupCMD)   // (Perlu diinisialisasi di cmd/backup_cmd/backup.go)
 	rootCmd.AddCommand(encrypt_cmd.EncryptCMD) // Command untuk enkripsi dan dekripsi file
+	rootCmd.AddCommand(dbscan_cmd.DbScanCmd)   // Command untuk database scanning
 }

@@ -2,6 +2,8 @@ package database
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
 )
 
 // CountDatabases menghitung jumlah database pada server
@@ -16,84 +18,130 @@ func (s *Client) CountDatabases() (int, error) {
 
 // Database metric collection functions
 
+// GetDatabaseSize menghitung total ukuran data + indeks untuk sebuah database.
+// Ini adalah alternatif yang jauh lebih cepat daripada query ke information_schema.
 func (s *Client) GetDatabaseSize(ctx context.Context, dbName string) (int64, error) {
-	query := `
-		SELECT COALESCE(SUM(data_length + index_length), 0) 
-		FROM information_schema.tables 
-		WHERE table_schema = ?`
-
-	var size int64
-	err := s.DB().QueryRowContext(ctx, query, dbName).Scan(&size)
-	return size, err
+	// Use information_schema aggregation to reliably compute total size.
+	// This is portable across MySQL/MariaDB versions and returns a single row.
+	var total sql.NullInt64
+	query := `SELECT IFNULL(SUM(DATA_LENGTH + INDEX_LENGTH), 0) FROM information_schema.TABLES WHERE TABLE_SCHEMA = ?`
+	err := s.DB().QueryRowContext(ctx, query, dbName).Scan(&total)
+	if err != nil {
+		return 0, err
+	}
+	return total.Int64, nil
 }
 
 func (s *Client) GetTableCount(ctx context.Context, dbName string) (int, error) {
-	query := `
-		SELECT COUNT(*) 
-		FROM information_schema.tables 
-		WHERE table_schema = ? AND table_type = 'BASE TABLE'`
+	query := fmt.Sprintf("SHOW FULL TABLES FROM `%s` WHERE Table_type = 'BASE TABLE'", dbName)
+	rows, err := s.DB().QueryContext(ctx, query)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
 
 	var count int
-	err := s.DB().QueryRowContext(ctx, query, dbName).Scan(&count)
-	return count, err
+	for rows.Next() {
+		count++
+	}
+
+	if err = rows.Err(); err != nil {
+		return 0, err
+	}
+	return count, nil
 }
 
 func (s *Client) GetProcedureCount(ctx context.Context, dbName string) (int, error) {
-	query := `
-		SELECT COUNT(*) 
-		FROM information_schema.routines 
-		WHERE routine_schema = ? AND routine_type = 'PROCEDURE'
-		LIMIT 1000`
+	// 1. Gunakan perintah SHOW PROCEDURE STATUS yang jauh lebih cepat.
+	//    Filter langsung dengan klausa WHERE Db = ?.
+	query := `SHOW PROCEDURE STATUS WHERE Db = ?`
+
+	rows, err := s.DB().QueryContext(ctx, query, dbName)
+	if err != nil {
+		// 2. Kembalikan error agar pemanggil tahu ada masalah.
+		return 0, err
+	}
+	defer rows.Close()
 
 	var count int
-	err := s.DB().QueryRowContext(ctx, query, dbName).Scan(&count)
-	if err != nil {
-		return 0, nil // Return 0 instead of error untuk graceful degradation
+	// Cukup hitung jumlah baris yang dikembalikan.
+	for rows.Next() {
+		count++
 	}
-	return count, err
+
+	// Selalu periksa error setelah iterasi selesai.
+	if err = rows.Err(); err != nil {
+		return 0, err
+	}
+
+	return count, nil
 }
 
 func (s *Client) GetFunctionCount(ctx context.Context, dbName string) (int, error) {
-	query := `
-		SELECT COUNT(*) 
-		FROM information_schema.routines 
-		WHERE routine_schema = ? AND routine_type = 'FUNCTION'
-		LIMIT 1000`
+	// 1. Gunakan perintah SHOW FUNCTION STATUS yang jauh lebih cepat.
+	query := `SHOW FUNCTION STATUS WHERE Db = ?`
+
+	rows, err := s.DB().QueryContext(ctx, query, dbName)
+	if err != nil {
+		// 2. Kembalikan error yang sebenarnya agar masalah tidak tersembunyi.
+		return 0, err
+	}
+	defer rows.Close()
 
 	var count int
-	err := s.DB().QueryRowContext(ctx, query, dbName).Scan(&count)
-	if err != nil {
-		return 0, nil // Return 0 instead of error untuk graceful degradation
+	// Hitung jumlah baris yang dikembalikan.
+	for rows.Next() {
+		count++
 	}
-	return count, err
+
+	// Periksa error yang mungkin terjadi saat iterasi.
+	if err = rows.Err(); err != nil {
+		return 0, err
+	}
+
+	return count, nil
 }
 
 func (s *Client) GetViewCount(ctx context.Context, dbName string) (int, error) {
-	query := `
-		SELECT COUNT(*) 
-		FROM information_schema.views 
-		WHERE table_schema = ?
-		LIMIT 1000`
+	// 1. Gunakan SHOW FULL TABLES, ini jauh lebih cepat.
+	//    Filter hasilnya dengan Table_type = 'VIEW'.
+	query := fmt.Sprintf("SHOW FULL TABLES FROM `%s` WHERE Table_type = 'VIEW'", dbName)
+
+	rows, err := s.DB().QueryContext(ctx, query)
+	if err != nil {
+		// 2. Kembalikan error agar pemanggil tahu ada masalah.
+		return 0, err
+	}
+	defer rows.Close()
 
 	var count int
-	err := s.DB().QueryRowContext(ctx, query, dbName).Scan(&count)
-	if err != nil {
-		return 0, nil // Return 0 instead of error untuk graceful degradation
+	// Hitung jumlah baris yang cocok.
+	for rows.Next() {
+		count++
 	}
-	return count, err
+
+	// Periksa error yang mungkin terjadi saat iterasi.
+	if err = rows.Err(); err != nil {
+		return 0, err
+	}
+
+	return count, nil
 }
 
 func (s *Client) GetUserGrantCount(ctx context.Context, dbName string) (int, error) {
+	// 1. Kueri langsung ke tabel mysql.db yang jauh lebih cepat.
+	//    Kita hitung kombinasi unik dari User dan Host.
 	query := `
-		SELECT COUNT(DISTINCT grantee) 
-		FROM information_schema.schema_privileges 
-		WHERE table_schema = ?
-		LIMIT 1000`
+        SELECT COUNT(DISTINCT CONCAT(User, '@', Host)) 
+        FROM mysql.db 
+        WHERE Db = ?`
 
 	var count int
+	// Karena query COUNT(*) mengembalikan satu baris, QueryRowContext cocok di sini.
 	err := s.DB().QueryRowContext(ctx, query, dbName).Scan(&count)
 	if err != nil {
-		return 0, nil // Return 0 instead of error untuk graceful degradation
+		// 2. Kembalikan error yang sebenarnya, jangan disembunyikan.
+		return 0, err
 	}
-	return count, err
+	return count, nil
 }

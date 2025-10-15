@@ -23,11 +23,11 @@ import (
 func InitializeDatabaseFromEnv() (*Client, error) {
 	// Ambil konfigurasi dari environment variables
 	creds := structs.ServerDBConnection{
-		Host:     getEnvOrDefault("SFDB_DB_HOST", "localhost"),
-		Port:     getEnvOrDefaultInt("SFDB_DB_PORT", 3306),
-		User:     getEnvOrDefault("SFDB_DB_USER", "root"),
-		Password: getEnvOrDefault("SFDB_DB_PASSWORD", ""),
-		Database: getEnvOrDefault("SFDB_DB_NAME", ""),
+		Host:     GetEnvOrDefault("SFDB_DB_HOST", "localhost"),
+		Port:     GetEnvOrDefaultInt("SFDB_DB_PORT", 3306),
+		User:     GetEnvOrDefault("SFDB_DB_USER", "root"),
+		Password: GetEnvOrDefault("SFDB_DB_PASSWORD", ""),
+		Database: GetEnvOrDefault("SFDB_DB_NAME", ""),
 	}
 
 	// Menggunakan fungsi InitializeDatabase yang sudah ada
@@ -46,14 +46,14 @@ func (c *Client) DatabaseExists(ctx context.Context, dbName string) (bool, error
 }
 
 // Helper functions untuk mengambil environment variables
-func getEnvOrDefault(key, defaultValue string) string {
+func GetEnvOrDefault(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
 	}
 	return defaultValue
 }
 
-func getEnvOrDefaultInt(key string, defaultValue int) int {
+func GetEnvOrDefaultInt(key string, defaultValue int) int {
 	if value := os.Getenv(key); value != "" {
 		if intValue, err := strconv.Atoi(value); err == nil {
 			return intValue
