@@ -44,16 +44,6 @@ func (s *Service) PrepareBackupSession(ctx context.Context, headerTitle string, 
 		log.Fatalf("Error: %v", err)
 	}
 
-	// Cek versi database
-	version, err := client.GetVersion(ctx)
-	if err != nil {
-		s.Logger.Warn("Gagal mendapatkan versi database: " + err.Error())
-		client.Close()
-		return nil, nil, 0, err
-	} else {
-		s.Logger.Info("Terkoneksi ke database versi: " + version)
-	}
-
 	// Get, Set dan cek max_statement_time untuk sesi ini
 	originalMaxStatementsTime, err := s.AturMaxStatementsTime(ctx, client)
 	if err != nil {
@@ -102,13 +92,13 @@ func (s *Service) SetupBackupExecution() (BackupConfig, error) {
 
 	// Log konfigurasi
 	if config.EncryptionEnabled {
-		s.Logger.Info("Enkripsi diaktifkan, memastikan ketersediaan kunci enkripsi...")
+		s.Logger.Info("Enkripsi AES-256-GCM diaktifkan untuk backup (kompatibel dengan OpenSSL)")
 	} else {
 		s.Logger.Info("Enkripsi tidak diaktifkan, melewati langkah kunci enkripsi...")
 	}
 
 	if config.CompressionRequired {
-		s.Logger.Infof("Kompresi diaktifkan dengan tipe: %s", config.CompressionType)
+		s.Logger.Infof("Kompresi %s diaktifkan (level: %s)", config.CompressionType, s.BackupOptions.Compression.Level)
 	} else {
 		s.Logger.Info("Kompresi tidak diaktifkan, melewati langkah kompresi...")
 	}

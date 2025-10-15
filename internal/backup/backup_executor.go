@@ -15,43 +15,33 @@ import (
 	"time"
 )
 
-// ExecuteBackup adalah fungsi general untuk melakukan backup database
-// backupMode: "separate" untuk file terpisah per database, "combined" untuk satu file gabungan
-func (s *Service) ExecuteBackup(ctx context.Context, dbFiltered []string, backupMode string) error {
-	return s.ExecuteBackupWithSummary(ctx, dbFiltered, backupMode)
-}
-
-// ExecuteBackupWithDetailCollection melakukan backup dengan collection detail database
-func (s *Service) ExecuteBackupWithDetailCollection(ctx context.Context, client *database.Client, dbFiltered []string, backupMode string) error {
-	// Setup konfigurasi backup (cleanup, validate, konfigurasi)
+// ExecuteBackup adalah satu-satunya entry point untuk menjalankan proses backup.
+// Ia mengorkestrasi seluruh alur: setup, eksekusi, pengumpulan detail (opsional), dan pembuatan summary.
+// REFACTOR: Mengonsolidasikan semua fungsi Execute... menjadi satu entry point yang jelas.
+func (s *Service) ExecuteBackup(ctx context.Context, client *database.Client, dbFiltered []string, backupMode string, collectDetails bool) error {
+	// 1. Setup konfigurasi backup
 	config, err := s.SetupBackupExecution()
 	if err != nil {
 		return fmt.Errorf("gagal setup backup execution: %w", err)
 	}
 
-	// Tracking untuk summary
 	startTime := time.Now()
-	var successfulDBs []DatabaseBackupInfo
-	var failedDBs []FailedDatabaseInfo
-	var errors []string
+	var result backupResult
 
-	// Lakukan backup berdasarkan mode
-	var backupErr error
+	// 2. Lakukan backup berdasarkan mode
 	if backupMode == "separate" {
-		backupErr = s.executeBackupSeparateWithTracking(ctx, config, dbFiltered, &successfulDBs, &failedDBs, &errors)
+		result = s.executeBackupSeparate(ctx, config, dbFiltered)
 	} else {
-		backupErr = s.executeBackupCombinedWithTracking(ctx, config, dbFiltered, &successfulDBs, &failedDBs, &errors)
+		result = s.executeBackupCombined(ctx, config, dbFiltered)
 	}
 
-	// Kumpulkan detail database secara concurrent (jika backup berhasil dan ada database yang berhasil)
+	// 3. (Opsional) Kumpulkan detail database jika diminta dan ada backup yang berhasil
 	var databaseDetails map[string]DatabaseDetailInfo
-	if len(successfulDBs) > 0 {
-		// Ambil daftar database unik dari successful databases
+	if collectDetails && len(result.successful) > 0 {
 		uniqueDBs := make(map[string]bool)
-		for _, db := range successfulDBs {
+		for _, db := range result.successful {
 			uniqueDBs[db.DatabaseName] = true
 		}
-
 		dbNames := make([]string, 0, len(uniqueDBs))
 		for dbName := range uniqueDBs {
 			dbNames = append(dbNames, dbName)
@@ -61,153 +51,156 @@ func (s *Service) ExecuteBackupWithDetailCollection(ctx context.Context, client 
 		databaseDetails = s.CollectDatabaseDetails(ctx, client, dbNames)
 	}
 
-	// Buat dan simpan summary backup dengan detail database
-	summary := s.CreateBackupSummaryWithDetails(backupMode, dbFiltered, successfulDBs, failedDBs, startTime, errors, databaseDetails)
-
-	// Simpan summary ke JSON
+	// 4. Buat, simpan, dan tampilkan summary
+	summary := s.CreateBackupSummaryWithDetails(backupMode, dbFiltered, result.successful, result.failed, startTime, result.errors, databaseDetails)
 	if err := s.SaveSummaryToJSON(summary); err != nil {
 		s.Logger.Errorf("Gagal menyimpan summary ke JSON: %v", err)
 	}
-
-	// Tampilkan summary dalam format table
 	s.DisplaySummaryTable(summary)
 
-	return backupErr
-}
-
-// ExecuteBackupWithSummary melakukan backup dengan membuat summary
-func (s *Service) ExecuteBackupWithSummary(ctx context.Context, dbFiltered []string, backupMode string) error {
-	// Setup konfigurasi backup (cleanup, validate, konfigurasi)
-	config, err := s.SetupBackupExecution()
-	if err != nil {
-		return fmt.Errorf("gagal setup backup execution: %w", err)
-	}
-
-	// Tracking untuk summary
-	startTime := time.Now()
-	var successfulDBs []DatabaseBackupInfo
-	var failedDBs []FailedDatabaseInfo
-	var errors []string
-
-	// Lakukan backup berdasarkan mode
-	var backupErr error
-	if backupMode == "separate" {
-		backupErr = s.executeBackupSeparateWithTracking(ctx, config, dbFiltered, &successfulDBs, &failedDBs, &errors)
-	} else {
-		backupErr = s.executeBackupCombinedWithTracking(ctx, config, dbFiltered, &successfulDBs, &failedDBs, &errors)
-	}
-
-	// Buat dan simpan summary backup (bahkan jika ada error)
-	summary := s.CreateBackupSummary(backupMode, dbFiltered, successfulDBs, failedDBs, startTime, errors)
-
-	// Simpan summary ke JSON
-	if err := s.SaveSummaryToJSON(summary); err != nil {
-		s.Logger.Errorf("Gagal menyimpan summary ke JSON: %v", err)
-	}
-
-	// Tampilkan summary dalam format table
-	s.DisplaySummaryTable(summary)
-
-	return backupErr
-}
-
-// executeBackupSeparate melakukan backup dengan file terpisah per database
-func (s *Service) executeBackupSeparate(ctx context.Context, config BackupConfig, dbFiltered []string) error {
-	ui.PrintSubHeader("Proses Backup Database Terpisah")
-
-	s.Logger.Info("Memulai proses backup database secara terpisah...")
-	s.Logger.Infof("Total database yang akan di-backup: %d", len(dbFiltered))
-
-	// Counter untuk tracking backup yang berhasil dan gagal
-	successCount := 0
-	failedDatabases := []string{}
-
-	// Loop melalui setiap database untuk backup terpisah
-	for i, dbName := range dbFiltered {
-		s.Logger.Infof("Memproses database [%d/%d]: %s", i+1, len(dbFiltered), dbName)
-
-		// Generate nama file untuk database ini
-		outputFile, err := s.GenerateBackupFilename(dbName)
-		if err != nil {
-			s.Logger.Errorf("Gagal generate nama file untuk database %s: %v", dbName, err)
-			failedDatabases = append(failedDatabases, dbName)
-			continue
+	// 5. Kembalikan error jika ada database yang gagal di-backup
+	if len(result.failed) > 0 {
+		var failedNames []string
+		for _, failed := range result.failed {
+			failedNames = append(failedNames, failed.DatabaseName)
 		}
-		// Buat nama file output untuk database ini
-		outputFile = outputFile + ".sql"
-
-		// Tambahkan ekstensi kompresi dan enkripsi
-		outputFile = s.addFileExtensions(outputFile, config)
-		fullOutputPath := filepath.Join(config.OutputDir, outputFile)
-
-		// Siapkan argumen mysqldump untuk database tunggal ini
-		mysqldumpArgs := s.buildMysqldumpArgs(config.BaseDumpArgs, dbFiltered, dbName)
-
-		s.Logger.Debug("Direktori output: " + config.OutputDir)
-		s.Logger.Debug("File output: " + fullOutputPath)
-
-		// Jalankan mysqldump dengan pipe ke output file
-		if err := s.executeMysqldumpWithPipe(ctx, mysqldumpArgs, fullOutputPath, config.CompressionRequired, config.CompressionType); err != nil {
-			s.Logger.Errorf("Gagal backup database %s: %v", dbName, err)
-			failedDatabases = append(failedDatabases, dbName)
-			continue
-		}
-
-		s.Logger.Infof("Database %s berhasil di-backup ke: %s", dbName, fullOutputPath)
-		successCount++
-	}
-
-	// Laporan hasil backup
-	s.Logger.Info("Proses backup database terpisah selesai.")
-	s.Logger.Infof("Berhasil: %d database, Gagal: %d database", successCount, len(failedDatabases))
-
-	if len(failedDatabases) > 0 {
-		s.Logger.Warnf("Database yang gagal di-backup: %v", failedDatabases)
-		return fmt.Errorf("beberapa database gagal di-backup: %v", failedDatabases)
+		return fmt.Errorf("beberapa database gagal di-backup: %v", failedNames)
 	}
 
 	return nil
 }
 
-// executeBackupCombined melakukan backup dengan satu file gabungan
-func (s *Service) executeBackupCombined(ctx context.Context, config BackupConfig, dbFiltered []string) error {
-	ui.PrintSubHeader("Proses Backup Database")
+// executeBackupSeparate melakukan backup dengan file terpisah per database.
+// REFACTOR: Disederhanakan, tidak lagi menerima pointer slice, tapi mengembalikan struct backupResult.
+func (s *Service) executeBackupSeparate(ctx context.Context, config BackupConfig, dbFiltered []string) backupResult {
+	ui.PrintSubHeader("Proses Backup Database Terpisah")
+	s.Logger.Infof("Total database yang akan di-backup: %d", len(dbFiltered))
 
-	s.Logger.Info("Memulai proses backup database...")
+	var res backupResult
 
-	// Generate nama file untuk backup all databases
-	baseOutputFile, err := s.GenerateBackupFilename("all_databases")
-	if err != nil {
-		return fmt.Errorf("gagal generate nama file backup: %w", err)
+	for i, dbName := range dbFiltered {
+		s.Logger.Infof("Memproses database [%d/%d]: %s", i+1, len(dbFiltered), dbName)
+
+		// REFACTOR: Logika untuk mem-backup satu DB diekstrak ke fungsi sendiri.
+		info, err := s.backupSingleDatabase(ctx, config, dbName)
+		if err != nil {
+			errorMsg := fmt.Sprintf("Gagal backup database %s: %v", dbName, err)
+			res.failed = append(res.failed, FailedDatabaseInfo{DatabaseName: dbName, Error: err.Error()})
+			res.errors = append(res.errors, errorMsg)
+			s.Logger.Error(errorMsg)
+			continue
+		}
+
+		res.successful = append(res.successful, info)
+		s.Logger.Infof("Database %s berhasil di-backup ke: %s", dbName, info.OutputFile)
 	}
 
-	// Buat nama file output
-	outputFile := baseOutputFile + ".sql"
+	s.Logger.Info("Proses backup database terpisah selesai.")
+	s.Logger.Infof("Berhasil: %d database, Gagal: %d database", len(res.successful), len(res.failed))
 
-	// Tambahkan ekstensi kompresi dan enkripsi
-	outputFile = s.addFileExtensions(outputFile, config)
+	return res
+}
+
+// backupSingleDatabase menangani logika untuk membackup satu database.
+// REFACTOR: Fungsi baru hasil ekstraksi untuk meningkatkan keterbacaan dan reusability.
+func (s *Service) backupSingleDatabase(ctx context.Context, config BackupConfig, dbName string) (DatabaseBackupInfo, error) {
+	startTime := time.Now()
+
+	// Generate nama file
+	baseOutputFile, err := s.GenerateBackupFilename(dbName)
+	if err != nil {
+		return DatabaseBackupInfo{}, fmt.Errorf("gagal generate nama file: %w", err)
+	}
+	outputFile := s.addFileExtensions(baseOutputFile+".sql", config)
 	fullOutputPath := filepath.Join(config.OutputDir, outputFile)
 
-	// Siapkan argumen mysqldump dengan kredensial database
-	mysqldumpArgs := s.buildMysqldumpArgs(config.BaseDumpArgs, dbFiltered, "")
+	// Siapkan dan jalankan mysqldump
+	mysqldumpArgs := s.buildMysqldumpArgs(config.BaseDumpArgs, nil, dbName)
 
+	if err := s.executeMysqldumpWithPipe(ctx, mysqldumpArgs, fullOutputPath, config.CompressionRequired, config.CompressionType); err != nil {
+		return DatabaseBackupInfo{}, err
+	}
+
+	// Kumpulkan informasi hasil backup
+	fileInfo, err := os.Stat(fullOutputPath)
+	var fileSize int64
+	if err == nil {
+		fileSize = fileInfo.Size()
+	}
+
+	return DatabaseBackupInfo{
+		DatabaseName:  dbName,
+		OutputFile:    fullOutputPath,
+		FileSize:      fileSize,
+		FileSizeHuman: s.FormatFileSize(fileSize),
+		Duration:      s.FormatDuration(time.Since(startTime)),
+	}, nil
+}
+
+// executeBackupCombined melakukan backup dengan satu file gabungan.
+// REFACTOR: Disederhanakan, mengembalikan struct backupResult.
+func (s *Service) executeBackupCombined(ctx context.Context, config BackupConfig, dbFiltered []string) backupResult {
+	ui.PrintSubHeader("Proses Backup Database Gabungan")
+	s.Logger.Info("Memulai proses backup...")
+
+	var res backupResult
+	backupStartTime := time.Now()
+
+	// Generate nama file
+	baseOutputFile, err := s.GenerateBackupFilename("all_databases")
+	if err != nil {
+		errorMsg := fmt.Errorf("gagal generate nama file backup: %w", err)
+		res.errors = append(res.errors, errorMsg.Error())
+		for _, dbName := range dbFiltered {
+			res.failed = append(res.failed, FailedDatabaseInfo{DatabaseName: dbName, Error: errorMsg.Error()})
+		}
+		return res
+	}
+
+	outputFile := s.addFileExtensions(baseOutputFile+".sql", config)
+	fullOutputPath := filepath.Join(config.OutputDir, outputFile)
+
+	// Siapkan dan jalankan mysqldump
+	mysqldumpArgs := s.buildMysqldumpArgs(config.BaseDumpArgs, dbFiltered, "")
 	s.Logger.Debug("Direktori output: " + config.OutputDir)
 	s.Logger.Debug("File output: " + fullOutputPath)
 
-	// Jalankan mysqldump dengan pipe ke output file
 	if err := s.executeMysqldumpWithPipe(ctx, mysqldumpArgs, fullOutputPath, config.CompressionRequired, config.CompressionType); err != nil {
-		return fmt.Errorf("gagal menjalankan mysqldump: %w", err)
+		errorMsg := fmt.Errorf("gagal menjalankan mysqldump: %w", err)
+		res.errors = append(res.errors, errorMsg.Error())
+		for _, dbName := range dbFiltered {
+			res.failed = append(res.failed, FailedDatabaseInfo{DatabaseName: dbName, Error: errorMsg.Error()})
+		}
+		return res
+	}
+
+	// Kumpulkan informasi hasil backup
+	backupDuration := time.Since(backupStartTime)
+	fileInfo, err := os.Stat(fullOutputPath)
+	var fileSize int64
+	if err == nil {
+		fileSize = fileInfo.Size()
+	}
+
+	// Buat entri untuk setiap database yang berhasil di-backup dalam satu file
+	for _, dbName := range dbFiltered {
+		res.successful = append(res.successful, DatabaseBackupInfo{
+			DatabaseName:  dbName,
+			OutputFile:    fullOutputPath,
+			FileSize:      fileSize, // Ukuran file sama untuk semua DB dalam mode ini
+			FileSizeHuman: s.FormatFileSize(fileSize),
+			Duration:      s.FormatDuration(backupDuration), // Durasi juga sama
+		})
 	}
 
 	s.Logger.Info("Proses backup semua database selesai.")
 	s.Logger.Infof("File backup tersimpan di: %s", fullOutputPath)
-
-	return nil
+	return res
 }
 
-// executeMysqldumpWithPipe menjalankan mysqldump dengan pipe ke file output
+// executeMysqldumpWithPipe menjalankan mysqldump dengan pipe ke file output.
+// (Fungsi ini sudah cukup baik dan tidak memerlukan perubahan signifikan).
 func (s *Service) executeMysqldumpWithPipe(ctx context.Context, mysqldumpArgs []string, outputPath string, compressionRequired bool, compressionType string) error {
-	// Buat file output
 	outputFile, err := os.Create(outputPath)
 	if err != nil {
 		return fmt.Errorf("gagal membuat file output: %w", err)
@@ -219,11 +212,9 @@ func (s *Service) executeMysqldumpWithPipe(ctx context.Context, mysqldumpArgs []
 
 	// Setup enkripsi jika diperlukan (layer pertama: paling dalam)
 	// Urutan layer: File -> Encryption -> Compression -> mysqldump
-	encryptionEnabled := s.BackupOptions.Encryption.Enabled
-	if encryptionEnabled {
+	if s.BackupOptions.Encryption.Enabled {
 		encryptionKey := s.BackupOptions.Encryption.Key
 
-		// Resolve encryption key jika belum ada
 		if encryptionKey == "" {
 			resolvedKey, source, err := encrypt.ResolveEncryptionKey("")
 			if err != nil {
@@ -233,7 +224,6 @@ func (s *Service) executeMysqldumpWithPipe(ctx context.Context, mysqldumpArgs []
 			s.Logger.Infof("Kunci enkripsi diperoleh dari: %s", source)
 		}
 
-		// Buat encrypting writer dengan format kompatibel OpenSSL
 		encryptingWriter, err := encrypt.NewEncryptingWriter(writer, []byte(encryptionKey))
 		if err != nil {
 			return fmt.Errorf("gagal membuat encrypting writer: %w", err)
@@ -241,7 +231,6 @@ func (s *Service) executeMysqldumpWithPipe(ctx context.Context, mysqldumpArgs []
 		closers = append(closers, encryptingWriter)
 		writer = encryptingWriter
 
-		s.Logger.Info("Enkripsi AES-256-GCM diaktifkan untuk backup (kompatibel dengan OpenSSL)")
 	}
 
 	// Setup kompresi jika diperlukan (layer kedua: di atas enkripsi)
@@ -258,7 +247,6 @@ func (s *Service) executeMysqldumpWithPipe(ctx context.Context, mysqldumpArgs []
 		closers = append(closers, compressingWriter)
 		writer = compressingWriter
 
-		s.Logger.Infof("Kompresi %s diaktifkan (level: %s)", compressionType, s.BackupOptions.Compression.Level)
 	}
 
 	// Defer semua closers dalam urutan terbalik
@@ -270,187 +258,17 @@ func (s *Service) executeMysqldumpWithPipe(ctx context.Context, mysqldumpArgs []
 		}
 	}()
 
-	// Buat command mysqldump
+	// Buat dan jalankan command mysqldump
 	cmd := exec.CommandContext(ctx, "mysqldump", mysqldumpArgs...)
-
-	// Set stdout ke writer (file atau compressed writer)
 	cmd.Stdout = writer
 	cmd.Stderr = os.Stderr
 
-	s.Logger.Info("Menjalankan mysqldump...")
-	// Log command dengan password disembunyikan untuk keamanan
 	logArgs := s.sanitizeArgsForLogging(mysqldumpArgs)
-	s.Logger.Debugf("Command: mysqldump %s", strings.Join(logArgs, " "))
+	s.Logger.Infof("Command: mysqldump %s", strings.Join(logArgs, " "))
 
-	// Jalankan command
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("mysqldump gagal: %w", err)
 	}
-
-	s.Logger.Info("Mysqldump berhasil dijalankan")
-	return nil
-}
-
-// executeBackupSeparateWithTracking melakukan backup terpisah dengan tracking untuk summary
-func (s *Service) executeBackupSeparateWithTracking(ctx context.Context, config BackupConfig, dbFiltered []string, successfulDBs *[]DatabaseBackupInfo, failedDBs *[]FailedDatabaseInfo, errors *[]string) error {
-	ui.PrintSubHeader("Proses Backup Database Terpisah")
-
-	s.Logger.Info("Memulai proses backup database secara terpisah...")
-	s.Logger.Infof("Total database yang akan di-backup: %d", len(dbFiltered))
-
-	// Loop melalui setiap database untuk backup terpisah
-	for i, dbName := range dbFiltered {
-		dbStartTime := time.Now()
-		s.Logger.Infof("Memproses database [%d/%d]: %s", i+1, len(dbFiltered), dbName)
-
-		// Generate nama file untuk database ini
-		outputFile, err := s.GenerateBackupFilename(dbName)
-		if err != nil {
-			s.Logger.Errorf("Gagal generate nama file untuk database %s: %v", dbName, err)
-			*failedDBs = append(*failedDBs, FailedDatabaseInfo{
-				DatabaseName: dbName,
-				Error:        err.Error(),
-			})
-			*errors = append(*errors, fmt.Sprintf("Gagal generate nama file untuk database %s: %v", dbName, err))
-			continue
-		}
-
-		// Buat nama file output untuk database ini
-		outputFile = outputFile + ".sql"
-
-		// Tambahkan ekstensi kompresi dan enkripsi
-		outputFile = s.addFileExtensions(outputFile, config)
-		fullOutputPath := filepath.Join(config.OutputDir, outputFile)
-
-		// Siapkan argumen mysqldump untuk database tunggal ini
-		mysqldumpArgs := s.buildMysqldumpArgs(config.BaseDumpArgs, dbFiltered, dbName)
-
-		s.Logger.Debug("Direktori output: " + config.OutputDir)
-		s.Logger.Debug("File output: " + fullOutputPath)
-
-		// Jalankan mysqldump dengan pipe ke output file
-		if err := s.executeMysqldumpWithPipe(ctx, mysqldumpArgs, fullOutputPath, config.CompressionRequired, config.CompressionType); err != nil {
-			s.Logger.Errorf("Gagal backup database %s: %v", dbName, err)
-			*failedDBs = append(*failedDBs, FailedDatabaseInfo{
-				DatabaseName: dbName,
-				Error:        err.Error(),
-			})
-			*errors = append(*errors, fmt.Sprintf("Gagal backup database %s: %v", dbName, err))
-			continue
-		}
-
-		// Hitung durasi dan ukuran file
-		dbDuration := time.Since(dbStartTime)
-		fileInfo, err := os.Stat(fullOutputPath)
-		var fileSize int64
-		if err == nil {
-			fileSize = fileInfo.Size()
-		}
-
-		// Tambahkan ke list database yang berhasil
-		*successfulDBs = append(*successfulDBs, DatabaseBackupInfo{
-			DatabaseName:  dbName,
-			OutputFile:    fullOutputPath,
-			FileSize:      fileSize,
-			FileSizeHuman: s.FormatFileSize(fileSize),
-			Duration:      s.FormatDuration(dbDuration),
-		})
-
-		s.Logger.Infof("Database %s berhasil di-backup ke: %s", dbName, fullOutputPath)
-	}
-
-	// Laporan hasil backup
-	s.Logger.Info("Proses backup database terpisah selesai.")
-	s.Logger.Infof("Berhasil: %d database, Gagal: %d database", len(*successfulDBs), len(*failedDBs))
-
-	if len(*failedDBs) > 0 {
-		var failedNames []string
-		for _, failed := range *failedDBs {
-			failedNames = append(failedNames, failed.DatabaseName)
-		}
-		s.Logger.Warnf("Database yang gagal di-backup: %v", failedNames)
-		return fmt.Errorf("beberapa database gagal di-backup: %v", failedNames)
-	}
-
-	return nil
-}
-
-// executeBackupCombinedWithTracking melakukan backup gabungan dengan tracking untuk summary
-func (s *Service) executeBackupCombinedWithTracking(ctx context.Context, config BackupConfig, dbFiltered []string, successfulDBs *[]DatabaseBackupInfo, failedDBs *[]FailedDatabaseInfo, errors *[]string) error {
-	ui.PrintSubHeader("Proses Backup Database")
-
-	s.Logger.Info("Memulai proses backup database...")
-
-	// Catat waktu mulai backup untuk tracking durasi
-	backupStartTime := time.Now()
-
-	// Generate nama file untuk backup all databases
-	baseOutputFile, err := s.GenerateBackupFilename("all_databases")
-	if err != nil {
-		errorMsg := fmt.Errorf("gagal generate nama file backup: %w", err)
-		*errors = append(*errors, errorMsg.Error())
-
-		// Masukkan semua database ke failed list
-		for _, dbName := range dbFiltered {
-			*failedDBs = append(*failedDBs, FailedDatabaseInfo{
-				DatabaseName: dbName,
-				Error:        err.Error(),
-			})
-		}
-		return errorMsg
-	}
-
-	// Buat nama file output
-	outputFile := baseOutputFile + ".sql"
-
-	// Tambahkan ekstensi kompresi dan enkripsi
-	outputFile = s.addFileExtensions(outputFile, config)
-	fullOutputPath := filepath.Join(config.OutputDir, outputFile)
-
-	// Siapkan argumen mysqldump dengan kredensial database
-	mysqldumpArgs := s.buildMysqldumpArgs(config.BaseDumpArgs, dbFiltered, "")
-
-	s.Logger.Debug("Direktori output: " + config.OutputDir)
-	s.Logger.Debug("File output: " + fullOutputPath)
-
-	// Jalankan mysqldump dengan pipe ke output file
-	if err := s.executeMysqldumpWithPipe(ctx, mysqldumpArgs, fullOutputPath, config.CompressionRequired, config.CompressionType); err != nil {
-		errorMsg := fmt.Errorf("gagal menjalankan mysqldump: %w", err)
-		*errors = append(*errors, errorMsg.Error())
-
-		// Masukkan semua database ke failed list
-		for _, dbName := range dbFiltered {
-			*failedDBs = append(*failedDBs, FailedDatabaseInfo{
-				DatabaseName: dbName,
-				Error:        err.Error(),
-			})
-		}
-		return errorMsg
-	}
-
-	// Hitung durasi backup
-	backupDuration := time.Since(backupStartTime)
-
-	// Hitung ukuran file
-	fileInfo, err := os.Stat(fullOutputPath)
-	var fileSize int64
-	if err == nil {
-		fileSize = fileInfo.Size()
-	}
-
-	// Untuk combined backup, buat entry untuk setiap database yang di-backup
-	for _, dbName := range dbFiltered {
-		*successfulDBs = append(*successfulDBs, DatabaseBackupInfo{
-			DatabaseName:  dbName,
-			OutputFile:    fullOutputPath,
-			FileSize:      fileSize,
-			FileSizeHuman: s.FormatFileSize(fileSize),
-			Duration:      s.FormatDuration(backupDuration),
-		})
-	}
-
-	s.Logger.Info("Proses backup semua database selesai.")
-	s.Logger.Infof("File backup tersimpan di: %s", fullOutputPath)
 
 	return nil
 }

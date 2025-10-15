@@ -16,26 +16,6 @@ import (
 	"github.com/dustin/go-humanize"
 )
 
-// DatabaseDetailInfo berisi informasi detail database
-type DatabaseDetailInfo struct {
-	DatabaseName   string `json:"database_name"`
-	SizeBytes      int64  `json:"size_bytes"`
-	SizeHuman      string `json:"size_human"`
-	TableCount     int    `json:"table_count"`
-	ProcedureCount int    `json:"procedure_count"`
-	FunctionCount  int    `json:"function_count"`
-	ViewCount      int    `json:"view_count"`
-	UserGrantCount int    `json:"user_grant_count"`
-	CollectionTime string `json:"collection_time"`
-	Error          string `json:"error,omitempty"` // jika ada error saat collect
-}
-
-// DatabaseDetailJob untuk worker pattern
-type DatabaseDetailJob struct {
-	DatabaseName string
-	Client       *database.Client
-}
-
 // CollectDatabaseDetails mengumpulkan detail informasi untuk semua database secara concurrent
 func (s *Service) CollectDatabaseDetails(ctx context.Context, client *database.Client, dbNames []string) map[string]DatabaseDetailInfo {
 	const maxWorkers = 5

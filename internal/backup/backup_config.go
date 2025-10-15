@@ -1,35 +1,10 @@
 package backup
 
 import (
-	"errors"
 	"sfDBTools/pkg/common"
 	"sfDBTools/pkg/encrypt"
 	"sfDBTools/pkg/ui"
 )
-
-var (
-	// ErrGTIDUnsupported dikembalikan bila server tidak mendukung GTID (variabel tidak ada)
-	ErrGTIDUnsupported = errors.New("gtid variables unsupported on server")
-	// ErrGTIDPermissionDenied dikembalikan bila user tidak punya izin membaca GTID variables
-	ErrGTIDPermissionDenied = errors.New("permission denied reading gtid variables")
-
-	// ErrUserCancelled adalah sentinel error untuk menandai pembatalan oleh pengguna.
-	ErrUserCancelled = errors.New("user_cancelled")
-
-	// ErrNoDatabasesToBackup dikembalikan bila tidak ada database untuk di-backup setelah filtering
-	ErrNoDatabasesToBackup = errors.New("tidak ada database untuk di-backup setelah filtering")
-)
-
-// DatabaseFilterStats menyimpan statistik hasil filtering database
-type DatabaseFilterStats struct {
-	TotalFound     int    // Total database yang ditemukan
-	ToBackup       int    // Database yang akan di-backup
-	ExcludedSystem int    // Database sistem yang dikecualikan
-	ExcludedByList int    // Database dikecualikan karena blacklist
-	ExcludedByFile int    // Database dikecualikan karena tidak ada di whitelist file
-	ExcludedEmpty  int    // Database dengan nama kosong/invalid
-	FilterMode     string // Mode filter: "whitelist", "blacklist", atau "system_only"
-}
 
 // ResolveConnectionFromConfigFile memuat informasi koneksi database dari file konfigurasi
 // yang ditentukan dalam BackupOptions.ConfigFile. Jika file tidak ditentukan,

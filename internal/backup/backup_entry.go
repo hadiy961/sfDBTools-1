@@ -11,16 +11,6 @@ import (
 	"sfDBTools/pkg/ui"
 )
 
-// BackupConfig untuk konfigurasi backup entry point
-type BackupEntryConfig struct {
-	HeaderTitle string
-	ShowOptions bool
-	BackupMode  string // "separate" atau "combined"
-	EnableGTID  bool   // apakah perlu capture GTID
-	SuccessMsg  string
-	LogPrefix   string
-}
-
 // ExecuteBackupCommand adalah unified entry point untuk semua jenis backup
 func (s *Service) ExecuteBackupCommand(config BackupEntryConfig) error {
 	ctx := context.Background()
@@ -51,7 +41,7 @@ func (s *Service) ExecuteBackupCommand(config BackupEntryConfig) error {
 	}
 
 	// Lakukan backup dengan mode yang ditentukan
-	if err := s.ExecuteBackupWithDetailCollection(ctx, client, dbFiltered, config.BackupMode); err != nil {
+	if err := s.ExecuteBackup(ctx, client, dbFiltered, config.BackupMode, true); err != nil {
 		s.Logger.Error(config.LogPrefix + " gagal: " + err.Error())
 		// Kembalikan nilai awal max_statement_time jika ada error
 		s.KembalikanMaxStatementsTime(ctx, client, originalMaxStatementsTime)

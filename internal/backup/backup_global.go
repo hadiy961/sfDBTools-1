@@ -90,7 +90,6 @@ func (s *Service) buildMysqldumpArgs(baseDumpArgs string, dbFiltered []string, s
 	if singleDB != "" {
 		args = append(args, "--databases")
 		args = append(args, singleDB)
-		s.Logger.Debugf("Menggunakan --databases untuk database tunggal: %s", singleDB)
 		return args
 	}
 
