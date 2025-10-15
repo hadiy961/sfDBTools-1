@@ -215,18 +215,3 @@ func (s *Service) ShowLatestSummary() error {
 	s.DisplaySummaryTable(summary)
 	return nil
 }
-
-// SummaryFileEntry berisi informasi file summary untuk listing
-type SummaryFileEntry struct {
-	FileName      string
-	FilePath      string
-	BackupID      string
-	Status        string
-	BackupMode    string
-	Timestamp     time.Time
-	Duration      string
-	DatabaseCount int
-	FailedCount   int
-	TotalSize     string
-	CreatedAt     time.Time
-}
