@@ -77,6 +77,8 @@ func (s *Service) PrepareBackupSession(ctx context.Context, headerTitle string, 
 
 // SetupBackupExecution mempersiapkan konfigurasi backup yang umum
 func (s *Service) SetupBackupExecution() (BackupConfig, error) {
+	ui.PrintSubHeader("Persiapan Eksekusi Backup")
+
 	// 1. Jalankan cleanup backup lama terlebih dahulu untuk membebaskan ruang disk
 	s.Logger.Info("Menjalankan cleanup backup lama sebelum backup...")
 	if err := s.CleanupOldBackups(); err != nil {

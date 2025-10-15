@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sfDBTools/pkg/compress"
+	"sfDBTools/pkg/database"
 	"sfDBTools/pkg/encrypt"
 	"sfDBTools/pkg/ui"
 	"strings"
@@ -18,6 +19,60 @@ import (
 // backupMode: "separate" untuk file terpisah per database, "combined" untuk satu file gabungan
 func (s *Service) ExecuteBackup(ctx context.Context, dbFiltered []string, backupMode string) error {
 	return s.ExecuteBackupWithSummary(ctx, dbFiltered, backupMode)
+}
+
+// ExecuteBackupWithDetailCollection melakukan backup dengan collection detail database
+func (s *Service) ExecuteBackupWithDetailCollection(ctx context.Context, client *database.Client, dbFiltered []string, backupMode string) error {
+	// Setup konfigurasi backup (cleanup, validate, konfigurasi)
+	config, err := s.SetupBackupExecution()
+	if err != nil {
+		return fmt.Errorf("gagal setup backup execution: %w", err)
+	}
+
+	// Tracking untuk summary
+	startTime := time.Now()
+	var successfulDBs []DatabaseBackupInfo
+	var failedDBs []FailedDatabaseInfo
+	var errors []string
+
+	// Lakukan backup berdasarkan mode
+	var backupErr error
+	if backupMode == "separate" {
+		backupErr = s.executeBackupSeparateWithTracking(ctx, config, dbFiltered, &successfulDBs, &failedDBs, &errors)
+	} else {
+		backupErr = s.executeBackupCombinedWithTracking(ctx, config, dbFiltered, &successfulDBs, &failedDBs, &errors)
+	}
+
+	// Kumpulkan detail database secara concurrent (jika backup berhasil dan ada database yang berhasil)
+	var databaseDetails map[string]DatabaseDetailInfo
+	if len(successfulDBs) > 0 {
+		// Ambil daftar database unik dari successful databases
+		uniqueDBs := make(map[string]bool)
+		for _, db := range successfulDBs {
+			uniqueDBs[db.DatabaseName] = true
+		}
+
+		dbNames := make([]string, 0, len(uniqueDBs))
+		for dbName := range uniqueDBs {
+			dbNames = append(dbNames, dbName)
+		}
+
+		s.Logger.Info("Mengumpulkan detail informasi database...")
+		databaseDetails = s.CollectDatabaseDetails(ctx, client, dbNames)
+	}
+
+	// Buat dan simpan summary backup dengan detail database
+	summary := s.CreateBackupSummaryWithDetails(backupMode, dbFiltered, successfulDBs, failedDBs, startTime, errors, databaseDetails)
+
+	// Simpan summary ke JSON
+	if err := s.SaveSummaryToJSON(summary); err != nil {
+		s.Logger.Errorf("Gagal menyimpan summary ke JSON: %v", err)
+	}
+
+	// Tampilkan summary dalam format table
+	s.DisplaySummaryTable(summary)
+
+	return backupErr
 }
 
 // ExecuteBackupWithSummary melakukan backup dengan membuat summary
@@ -326,6 +381,9 @@ func (s *Service) executeBackupCombinedWithTracking(ctx context.Context, config 
 
 	s.Logger.Info("Memulai proses backup database...")
 
+	// Catat waktu mulai backup untuk tracking durasi
+	backupStartTime := time.Now()
+
 	// Generate nama file untuk backup all databases
 	baseOutputFile, err := s.GenerateBackupFilename("all_databases")
 	if err != nil {
@@ -370,6 +428,9 @@ func (s *Service) executeBackupCombinedWithTracking(ctx context.Context, config 
 		return errorMsg
 	}
 
+	// Hitung durasi backup
+	backupDuration := time.Since(backupStartTime)
+
 	// Hitung ukuran file
 	fileInfo, err := os.Stat(fullOutputPath)
 	var fileSize int64
@@ -377,14 +438,16 @@ func (s *Service) executeBackupCombinedWithTracking(ctx context.Context, config 
 		fileSize = fileInfo.Size()
 	}
 
-	// Untuk combined backup, semua database dianggap berhasil jika backup sukses
-	*successfulDBs = append(*successfulDBs, DatabaseBackupInfo{
-		DatabaseName:  "all_databases",
-		OutputFile:    fullOutputPath,
-		FileSize:      fileSize,
-		FileSizeHuman: s.FormatFileSize(fileSize),
-		Duration:      "N/A", // Duration akan dihitung di level atas
-	})
+	// Untuk combined backup, buat entry untuk setiap database yang di-backup
+	for _, dbName := range dbFiltered {
+		*successfulDBs = append(*successfulDBs, DatabaseBackupInfo{
+			DatabaseName:  dbName,
+			OutputFile:    fullOutputPath,
+			FileSize:      fileSize,
+			FileSizeHuman: s.FormatFileSize(fileSize),
+			Duration:      s.FormatDuration(backupDuration),
+		})
+	}
 
 	s.Logger.Info("Proses backup semua database selesai.")
 	s.Logger.Infof("File backup tersimpan di: %s", fullOutputPath)

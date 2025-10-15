@@ -50,11 +50,8 @@ func (s *Service) ExecuteBackupCommand(config BackupEntryConfig) error {
 		}
 	}
 
-	// Database filter sudah siap untuk di-backup
-	s.Logger.Info("Database filtering selesai, siap memulai proses backup")
-
 	// Lakukan backup dengan mode yang ditentukan
-	if err := s.ExecuteBackup(ctx, dbFiltered, config.BackupMode); err != nil {
+	if err := s.ExecuteBackupWithDetailCollection(ctx, client, dbFiltered, config.BackupMode); err != nil {
 		s.Logger.Error(config.LogPrefix + " gagal: " + err.Error())
 		// Kembalikan nilai awal max_statement_time jika ada error
 		s.KembalikanMaxStatementsTime(ctx, client, originalMaxStatementsTime)

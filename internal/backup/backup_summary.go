@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"sfDBTools/pkg/ui"
 	"time"
+
+	"github.com/dustin/go-humanize"
 )
 
 // BackupSummary adalah struktur untuk menyimpan summary backup
@@ -38,6 +40,9 @@ type BackupSummary struct {
 	// Database yang berhasil dan gagal
 	SuccessfulDatabases []DatabaseBackupInfo `json:"successful_databases"`
 	FailedDatabases     []FailedDatabaseInfo `json:"failed_databases"`
+
+	// Detail database info
+	DatabaseDetails map[string]DatabaseDetailInfo `json:"database_details,omitempty"` // Detail informasi setiap database
 
 	// Informasi error (jika ada)
 	Errors []string `json:"errors,omitempty"`
@@ -75,11 +80,12 @@ type BackupConfigSummary struct {
 
 // DatabaseBackupInfo berisi informasi database yang berhasil dibackup
 type DatabaseBackupInfo struct {
-	DatabaseName  string `json:"database_name"`
-	OutputFile    string `json:"output_file"`
-	FileSize      int64  `json:"file_size_bytes"`
-	FileSizeHuman string `json:"file_size_human"`
-	Duration      string `json:"duration"`
+	DatabaseName  string              `json:"database_name"`
+	OutputFile    string              `json:"output_file"`
+	FileSize      int64               `json:"file_size_bytes"`
+	FileSizeHuman string              `json:"file_size_human"`
+	Duration      string              `json:"duration"`
+	DetailInfo    *DatabaseDetailInfo `json:"detail_info,omitempty"` // Informasi detail database
 }
 
 // FailedDatabaseInfo berisi informasi database yang gagal dibackup
@@ -96,6 +102,79 @@ type SummaryFileInfo struct {
 	SizeHuman    string    `json:"size_human"`
 	DatabaseName string    `json:"database_name,omitempty"`
 	CreatedAt    time.Time `json:"created_at"`
+}
+
+// CreateBackupSummaryWithDetails membuat summary backup dengan detail database
+func (s *Service) CreateBackupSummaryWithDetails(backupMode string, dbFiltered []string, successfulDBs []DatabaseBackupInfo, failedDBs []FailedDatabaseInfo, startTime time.Time, errors []string, databaseDetails map[string]DatabaseDetailInfo) *BackupSummary {
+	endTime := time.Now()
+	duration := endTime.Sub(startTime)
+
+	// Generate backup ID
+	backupID := fmt.Sprintf("backup_%s", startTime.Format("20060102_150405"))
+
+	// Tentukan status backup
+	status := "success"
+	if len(failedDBs) > 0 {
+		if len(successfulDBs) > 0 {
+			status = "partial"
+		} else {
+			status = "failed"
+		}
+	}
+
+	// Hitung statistik database
+	dbStats := DatabaseSummaryStats{
+		TotalDatabases:    len(dbFiltered),
+		SuccessfulBackups: len(successfulDBs),
+		FailedBackups:     len(failedDBs),
+	}
+
+	// Tambahkan informasi filter jika ada
+	if s.FilterInfo != nil {
+		dbStats.ExcludedDatabases = s.FilterInfo.ExcludedDatabases
+		dbStats.SystemDatabases = s.FilterInfo.SystemDatabases
+		dbStats.FilteredDatabases = s.FilterInfo.IncludedDatabases
+	}
+
+	// Kumpulkan informasi file output
+	outputInfo := s.collectOutputInfo(successfulDBs)
+
+	// Buat ringkasan konfigurasi backup
+	backupConfig := BackupConfigSummary{
+		CompressionEnabled: s.BackupOptions.Compression.Enabled,
+		EncryptionEnabled:  s.BackupOptions.Encryption.Enabled,
+		CleanupEnabled:     s.BackupOptions.Cleanup.Enabled,
+	}
+
+	if s.BackupOptions.Compression.Enabled {
+		backupConfig.CompressionType = s.BackupOptions.Compression.Type
+		backupConfig.CompressionLevel = s.BackupOptions.Compression.Level
+	}
+
+	if s.BackupOptions.DBList != "" {
+		backupConfig.DBListFile = s.BackupOptions.DBList
+	}
+
+	if s.BackupOptions.Cleanup.Enabled {
+		backupConfig.RetentionDays = s.BackupOptions.Cleanup.RetentionDays
+	}
+
+	return &BackupSummary{
+		BackupID:            backupID,
+		Timestamp:           startTime,
+		BackupMode:          backupMode,
+		Status:              status,
+		Duration:            formatDuration(duration),
+		StartTime:           startTime,
+		EndTime:             endTime,
+		DatabaseStats:       dbStats,
+		OutputInfo:          outputInfo,
+		BackupConfig:        backupConfig,
+		SuccessfulDatabases: successfulDBs,
+		FailedDatabases:     failedDBs,
+		DatabaseDetails:     databaseDetails, // Tambahkan detail database
+		Errors:              errors,
+	}
 }
 
 // CreateBackupSummary membuat summary backup
@@ -323,6 +402,32 @@ func (s *Service) DisplaySummaryTable(summary *BackupSummary) {
 		fmt.Println()
 	}
 
+	// Tabel detail database (jika ada informasi detail)
+	if len(summary.DatabaseDetails) > 0 {
+		fmt.Println("📊 Detail Database:")
+		detailHeaders := []string{"Database", "DB Size", "Tables", "Views", "Procs", "Funcs", "Users"}
+		var detailRows [][]string
+
+		for _, db := range summary.SuccessfulDatabases {
+			if detail, exists := summary.DatabaseDetails[db.DatabaseName]; exists {
+				detailRows = append(detailRows, []string{
+					detail.DatabaseName,
+					detail.SizeHuman,
+					fmt.Sprintf("%d", detail.TableCount),
+					fmt.Sprintf("%d", detail.ViewCount),
+					fmt.Sprintf("%d", detail.ProcedureCount),
+					fmt.Sprintf("%d", detail.FunctionCount),
+					fmt.Sprintf("%d", detail.UserGrantCount),
+				})
+			}
+		}
+
+		if len(detailRows) > 0 {
+			ui.FormatTable(detailHeaders, detailRows)
+			fmt.Println()
+		}
+	}
+
 	// Tabel database yang gagal (jika ada)
 	if len(summary.FailedDatabases) > 0 {
 		fmt.Println("❌ Database Gagal:")
@@ -375,16 +480,7 @@ func formatDuration(duration time.Duration) string {
 
 // formatFileSize memformat ukuran file menjadi string yang mudah dibaca
 func formatFileSize(bytes int64) string {
-	const unit = 1024
-	if bytes < unit {
-		return fmt.Sprintf("%d B", bytes)
-	}
-	div, exp := int64(unit), 0
-	for n := bytes / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+	return humanize.Bytes(uint64(bytes))
 }
 
 // FormatFileSize adalah wrapper untuk formatFileSize agar bisa dipanggil dari luar
