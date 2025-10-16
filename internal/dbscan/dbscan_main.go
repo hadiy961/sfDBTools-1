@@ -8,21 +8,20 @@ package dbscan
 
 import (
 	"sfDBTools/internal/appconfig"
+	"sfDBTools/internal/applog"
 	"sfDBTools/internal/structs"
-
-	"github.com/sirupsen/logrus"
 )
 
 // Service adalah service untuk database scanning
 type Service struct {
-	Logger       *logrus.Logger
+	Logger       applog.Logger
 	Config       *appconfig.Config
 	ScanOptions  structs.ScanOptions
 	DBConfigInfo structs.DBConfigInfo
 }
 
 // NewService membuat instance baru dari Service
-func NewService(logger *logrus.Logger, config *appconfig.Config) *Service {
+func NewService(logger applog.Logger, config *appconfig.Config) *Service {
 	return &Service{
 		Logger: logger,
 		Config: config,

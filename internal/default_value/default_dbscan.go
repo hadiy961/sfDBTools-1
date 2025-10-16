@@ -8,11 +8,15 @@ package defaultvalue
 
 import (
 	"os"
+	"sfDBTools/internal/appconfig"
 	"sfDBTools/internal/structs"
 )
 
 // GetDefaultScanOptions mengembalikan default options untuk database scan
 func GetDefaultScanOptions() structs.ScanOptions {
+	// Muat konfigurasi aplikasi untuk mendapatkan direktori konfigurasi
+	cfg, _ := appconfig.LoadConfigFromEnv()
+
 	opts := structs.ScanOptions{}
 
 	// Database Configuration
@@ -22,8 +26,7 @@ func GetDefaultScanOptions() structs.ScanOptions {
 	opts.Encryption.Key = os.Getenv("SFDB_ENCRYPTION_KEY")
 
 	// Database Selection
-	opts.DatabaseList.File = ""
-	opts.DatabaseList.UseFile = false
+	opts.DatabaseList.File = cfg.Backup.DBList.File
 
 	// Filter Options
 	opts.ExcludeSystem = true
@@ -48,7 +51,7 @@ func GetDefaultScanOptions() structs.ScanOptions {
 
 	// Output Options
 	opts.DisplayResults = true
-	opts.SaveToDB = false
+	opts.SaveToDB = true
 	opts.Background = false
 
 	return opts

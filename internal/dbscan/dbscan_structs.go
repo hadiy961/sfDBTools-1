@@ -12,6 +12,7 @@ type ScanEntryConfig struct {
 	ShowOptions bool
 	SuccessMsg  string
 	LogPrefix   string
+	Mode        string // "all" atau "database"
 }
 
 // ScanResult berisi hasil scanning

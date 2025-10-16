@@ -10,11 +10,12 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"sfDBTools/internal/applog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dustin/go-humanize"
-	"github.com/sirupsen/logrus"
 )
 
 // DatabaseDetailInfo berisi informasi detail database
@@ -38,14 +39,12 @@ type DatabaseDetailJob struct {
 }
 
 // CollectDatabaseDetails mengumpulkan detail informasi untuk semua database secara concurrent
-func CollectDatabaseDetails(ctx context.Context, client *Client, dbNames []string, logger *logrus.Logger) map[string]DatabaseDetailInfo {
+func CollectDatabaseDetails(ctx context.Context, client *Client, dbNames []string, logger applog.Logger) map[string]DatabaseDetailInfo {
 	const jobTimeout = 300 * time.Second // Increase overall timeout
 
 	// If there are no databases, return early.
 	if len(dbNames) == 0 {
-		if logger != nil {
-			logger.Infof("No databases to collect details for")
-		}
+		logger.Infof("No databases to collect details for")
 		return map[string]DatabaseDetailInfo{}
 	}
 
@@ -59,9 +58,14 @@ func CollectDatabaseDetails(ctx context.Context, client *Client, dbNames []strin
 		maxWorkers = len(dbNames)
 	}
 
-	if logger != nil {
-		logger.Infof("Mengumpulkan detail informasi untuk %d database...", len(dbNames))
-	}
+	total := len(dbNames)
+	// progress counters
+	var started int32
+	var completed int32
+	var failed int32
+
+	logger.Infof("Mengumpulkan detail informasi untuk %d database... workers=%d", total, maxWorkers)
+
 	startTime := time.Now()
 
 	jobs := make(chan DatabaseDetailJob, len(dbNames))
@@ -71,7 +75,8 @@ func CollectDatabaseDetails(ctx context.Context, client *Client, dbNames []strin
 	var wg sync.WaitGroup
 	for w := 0; w < maxWorkers; w++ {
 		wg.Add(1)
-		go databaseDetailWorker(ctx, jobs, results, &wg, jobTimeout, logger)
+		workerID := w
+		go databaseDetailWorker(ctx, jobs, results, &wg, jobTimeout, logger, &started, &completed, &failed, total, workerID)
 	}
 
 	// Send jobs
@@ -98,30 +103,49 @@ func CollectDatabaseDetails(ctx context.Context, client *Client, dbNames []strin
 	}
 
 	duration := time.Since(startTime)
-	if logger != nil {
-		logger.Infof("Pengumpulan detail database selesai dalam %v", duration)
-	}
+	logger.Infof("Pengumpulan detail database selesai dalam %v", duration)
 
 	return detailMap
 }
 
 // databaseDetailWorker adalah worker untuk mengumpulkan detail database
-func databaseDetailWorker(ctx context.Context, jobs <-chan DatabaseDetailJob, results chan<- DatabaseDetailInfo, wg *sync.WaitGroup, timeout time.Duration, logger *logrus.Logger) {
+func databaseDetailWorker(ctx context.Context, jobs <-chan DatabaseDetailJob, results chan<- DatabaseDetailInfo, wg *sync.WaitGroup, timeout time.Duration, logger applog.Logger, started *int32, completed *int32, failed *int32, total int, workerID int) {
 	defer wg.Done()
 
 	for job := range jobs {
+		// mark started
+		atomic.AddInt32(started, 1)
+
 		// Create timeout context for this job
+		jobStart := time.Now()
 		jobCtx, cancel := context.WithTimeout(ctx, timeout)
 
 		result := collectSingleDatabaseDetail(jobCtx, job.Client, job.DatabaseName, logger)
+
+		// send result
 		results <- result
+
+		// update counters
+		if result.Error != "" {
+			atomic.AddInt32(failed, 1)
+		}
+		done := atomic.AddInt32(completed, 1)
+
+		// log per-database finish and overall progress
+		elapsed := time.Since(jobStart)
+		if result.Error != "" {
+			logger.Warnf("worker-%d: finished %s in %v (error=%s)", workerID, job.DatabaseName, elapsed, result.Error)
+		}
+
+		percent := (float64(done) / float64(total)) * 100.0
+		logger.Infof("Progress: %d/%d completed (%.1f%%), failed=%d (%s)", done, total, percent, atomic.LoadInt32(failed), job.DatabaseName)
 
 		cancel()
 	}
 }
 
 // collectSingleDatabaseDetail mengumpulkan detail untuk satu database
-func collectSingleDatabaseDetail(ctx context.Context, client *Client, dbName string, logger *logrus.Logger) DatabaseDetailInfo {
+func collectSingleDatabaseDetail(ctx context.Context, client *Client, dbName string, logger applog.Logger) DatabaseDetailInfo {
 	startTime := time.Now()
 	detail := DatabaseDetailInfo{
 		DatabaseName:   dbName,

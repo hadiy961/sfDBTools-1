@@ -2,17 +2,34 @@ package dbscan
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"sfDBTools/pkg/database"
 	"sfDBTools/pkg/ui"
+	"syscall"
+	"time"
 )
 
 // ExecuteScanCommand adalah entry point untuk database scan
 func (s *Service) ExecuteScanCommand(config ScanEntryConfig) error {
 	ctx := context.Background()
-
-	// Jika background mode, jalankan secara asynchronous
+	s.ScanOptions.Mode = config.Mode
+	// Jika background mode, spawn sebagai daemon process
 	if s.ScanOptions.Background {
-		return s.ExecuteScanBackground(ctx, config)
+		if s.ScanOptions.DBConfig.FilePath == "" {
+			return fmt.Errorf("background mode memerlukan file konfigurasi database")
+		}
+
+		// Check jika sudah running dalam daemon mode
+		if os.Getenv("SFDB_DAEMON_MODE") == "1" {
+			// Sudah dalam daemon mode, jalankan actual work
+			return s.ExecuteScanInBackground(ctx, config)
+		}
+
+		// Spawn new process sebagai daemon
+		return s.spawnDaemonProcess(config)
 	}
 
 	// Setup connections
@@ -36,6 +53,101 @@ func (s *Service) ExecuteScanCommand(config ScanEntryConfig) error {
 	if config.SuccessMsg != "" {
 		ui.PrintSuccess(config.SuccessMsg)
 	}
+
+	return nil
+}
+
+// spawnDaemonProcess spawns new process sebagai background daemon
+func (s *Service) spawnDaemonProcess(config ScanEntryConfig) error {
+	// Get executable path
+	executable, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("gagal mendapatkan executable path: %w", err)
+	}
+
+	// Generate scan ID dan log file
+	scanID := fmt.Sprintf("scan_%s", time.Now().Format("20060102_150405"))
+	logDir := filepath.Join("logs", "dbscan")
+
+	// Create log directory jika belum ada
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		s.Logger.Warnf("Gagal membuat direktori log: %v, menggunakan stdout", err)
+		logDir = ""
+	}
+
+	// PID file path (fixed name to prevent multiple background runs)
+	pidFile := filepath.Join(logDir, "dbscan_background.pid")
+
+	// Check if PID file exists and process is running
+	if pidFile != "" {
+		if data, err := os.ReadFile(pidFile); err == nil {
+			// Parse pid
+			var existingPID int
+			if _, err := fmt.Sscanf(string(data), "%d", &existingPID); err == nil {
+				// Check if process exists
+				if err := syscall.Kill(existingPID, 0); err == nil {
+					return fmt.Errorf("background process sudah berjalan dengan PID %d (pidfile=%s)", existingPID, pidFile)
+				}
+				// If syscall.Kill returned ESRCH or other, we proceed and remove stale pidfile
+				_ = os.Remove(pidFile)
+			} else {
+				// Can't parse, remove stale file
+				_ = os.Remove(pidFile)
+			}
+		}
+	}
+
+	var logFile string
+	if logDir != "" {
+		logFile = filepath.Join(logDir, fmt.Sprintf("%s.log", scanID))
+	}
+
+	// Prepare command dengan semua arguments
+	args := os.Args[1:] // Skip executable name
+	cmd := exec.Command(executable, args...)
+
+	// Set environment untuk menandai daemon mode
+	cmd.Env = append(os.Environ(), "SFDB_DAEMON_MODE=1")
+
+	// Setup log file untuk stdout/stderr
+	if logFile != "" {
+		outFile, err := os.Create(logFile)
+		if err != nil {
+			return fmt.Errorf("gagal membuat log file: %w", err)
+		}
+		defer outFile.Close()
+
+		cmd.Stdout = outFile
+		cmd.Stderr = outFile
+	}
+
+	// Start process di background
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("gagal memulai background process: %w", err)
+	}
+
+	// Write PID file so we can prevent duplicate background runs
+	if pidFile != "" {
+		_ = os.WriteFile(pidFile, []byte(fmt.Sprintf("%d", cmd.Process.Pid)), 0644)
+	}
+
+	// Print informasi
+	ui.PrintHeader("DATABASE SCANNING - BACKGROUND MODE")
+	ui.PrintSuccess(fmt.Sprintf("Background process dimulai dengan PID: %d", cmd.Process.Pid))
+	ui.PrintInfo(fmt.Sprintf("Scan ID: %s", ui.ColorText(scanID, ui.ColorCyan)))
+
+	if logFile != "" {
+		ui.PrintInfo(fmt.Sprintf("Log file: %s", ui.ColorText(logFile, ui.ColorCyan)))
+		ui.PrintInfo(fmt.Sprintf("PID file: %s", ui.ColorText(pidFile, ui.ColorCyan)))
+		ui.PrintInfo(fmt.Sprintf("Monitor dengan: tail -f %s", logFile))
+	} else {
+		ui.PrintInfo("Logs akan ditulis ke system logger")
+	}
+
+	ui.PrintInfo("Process berjalan di background. Gunakan 'ps aux | grep sfdbtools' untuk check status.")
+
+	// Release process (detach dari parent)
+	// Don't wait for it to finish
 
 	return nil
 }

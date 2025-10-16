@@ -93,8 +93,9 @@ func (c *Client) DB() *sql.DB {
 
 // GetMaxStatementsTime adalah helper internal untuk mengambil nilai @@max_statement_time.
 func (c *Client) GetMaxStatementsTime(ctx context.Context) (float64, error) {
+	var name string
 	var raw sql.NullString
-	if err := c.db.QueryRowContext(ctx, "SHOW GLOBAL VARIABLES LIKE 'max_statement_time'").Scan(&raw); err != nil {
+	if err := c.db.QueryRowContext(ctx, "SHOW GLOBAL VARIABLES LIKE 'max_statement_time'").Scan(&name, &raw); err != nil {
 		// Jika tidak ada baris, MariaDB biasanya mengembalikan nilai default,
 		// jadi error ini jarang terjadi kecuali ada masalah koneksi.
 		return 0, fmt.Errorf("query max_statement_time gagal: %w", err)

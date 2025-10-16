@@ -67,7 +67,7 @@ type BackupDBFlags struct {
 
 // DBListOptions - Struct untuk menyimpan flags pada perintah backup db-list
 type DBListOptions struct {
-	DBList string `flag:"db-list" env:"SFDB_BACKUP_DB_LIST_FILE" default:""`
+	DBList string `flag:"db-list" env:"SFDB_DB_LIST_FILE" default:""`
 }
 
 // ExcludeOptions - Struct untuk menyimpan flags pada perintah backup exclude

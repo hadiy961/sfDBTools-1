@@ -17,7 +17,7 @@ func AddDbScanFlags(cmd *cobra.Command, opts *structs.ScanOptions) {
 	// Database Configuration Flags
 	cmd.Flags().StringVar(&opts.DBConfig.FilePath, "config-file", opts.DBConfig.FilePath,
 		"Path ke file konfigurasi database (encrypted)")
-	cmd.Flags().StringVar(&opts.Encryption.Key, "encryption-key", opts.Encryption.Key,
+	cmd.Flags().StringVar(&opts.Encryption.Key, "encryption-key", "",
 		"Encryption key untuk decrypt config file")
 
 	// Database Selection Flags
@@ -30,7 +30,7 @@ func AddDbScanFlags(cmd *cobra.Command, opts *structs.ScanOptions) {
 
 	// Filter Options Flags
 	cmd.Flags().BoolVar(&opts.ExcludeSystem, "exclude-system", opts.ExcludeSystem,
-		"Kecualikan system databases (information_schema, mysql, performance_schema, sys)")
+		"Kecualikan system databases")
 
 	// Target Database Flags
 	cmd.Flags().StringVar(&opts.TargetDB.Host, "target-host", opts.TargetDB.Host,
@@ -48,7 +48,7 @@ func AddDbScanFlags(cmd *cobra.Command, opts *structs.ScanOptions) {
 	cmd.Flags().BoolVar(&opts.DisplayResults, "display-results", opts.DisplayResults,
 		"Tampilkan hasil scan di console")
 	cmd.Flags().BoolVar(&opts.SaveToDB, "save-to-db", opts.SaveToDB,
-		"Simpan hasil scan ke database (database_details dan database_detail_history)")
+		"Simpan hasil scan ke database")
 	cmd.Flags().BoolVar(&opts.Background, "background", opts.Background,
 		"Jalankan scanning di background (async mode)")
 }

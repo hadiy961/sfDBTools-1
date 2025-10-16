@@ -41,4 +41,7 @@ type ScanOptions struct {
 	DisplayResults bool
 	SaveToDB       bool
 	Background     bool // Jalankan scanning di background
+
+	// Internal use only
+	Mode string // "all" atau "database"
 }

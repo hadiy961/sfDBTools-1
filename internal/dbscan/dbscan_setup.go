@@ -20,6 +20,7 @@ import (
 func (s *Service) PrepareScanSession(ctx context.Context, headerTitle string, showOptions bool) (client *database.Client, dbFiltered []string, err error) {
 	if headerTitle != "" {
 		ui.Headers(headerTitle)
+		s.Logger.Infof("=== %s ===", headerTitle)
 	}
 	if showOptions {
 		s.DisplayScanOptions()
@@ -62,7 +63,6 @@ func (s *Service) PrepareScanSession(ctx context.Context, headerTitle string, sh
 // ConnectToTargetDB membuat koneksi ke database pusat untuk menyimpan hasil.
 // Logika untuk mendapatkan konfigurasi dipisahkan untuk kejelasan.
 func (s *Service) ConnectToTargetDB(ctx context.Context) (*database.Client, error) {
-	ui.PrintSubHeader("Koneksi ke Database Center")
 	targetConn := s.getTargetDBConfig()
 
 	client, err := database.InitializeDatabase(targetConn)
@@ -100,11 +100,16 @@ func (s *Service) getTargetDBConfig() structs.ServerDBConnection {
 // GetFilteredDatabases mengambil dan memfilter daftar database sesuai aturan.
 // Menggunakan general database filtering system dari pkg/database
 func (s *Service) GetFilteredDatabases(ctx context.Context, client *database.Client) ([]string, *DatabaseFilterStats, error) {
-	// Setup filter options
+
+	// Setup filter options from ScanOptions. If a whitelist file is enabled, include it.
 	filterOpts := database.FilterOptions{
 		ExcludeSystem:    s.ScanOptions.ExcludeSystem,
 		ExcludeDatabases: s.ScanOptions.ExcludeList,
 		IncludeDatabases: s.ScanOptions.IncludeList,
+	}
+
+	if s.ScanOptions.Mode == "database" && s.ScanOptions.DatabaseList.File != "" {
+		filterOpts.IncludeFile = s.ScanOptions.DatabaseList.File
 	}
 
 	// Execute filtering

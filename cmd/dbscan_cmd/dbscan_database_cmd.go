@@ -42,6 +42,7 @@ Contoh penggunaan:
 			ShowOptions: true,
 			SuccessMsg:  "Proses scanning database selesai.",
 			LogPrefix:   "Proses database scan",
+			Mode:        "database",
 		}
 
 		return svc.ExecuteScanCommand(scanConfig)
