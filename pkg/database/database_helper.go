@@ -18,6 +18,7 @@ func InitializeDatabase(creds structs.ServerDBConnection) (*Client, error) {
 		Port:                 creds.Port,
 		User:                 creds.User,
 		Password:             creds.Password,
+		Database:             creds.Database, // Include database name
 		AllowNativePasswords: true,
 		ParseTime:            true,
 		Loc:                  time.Local,

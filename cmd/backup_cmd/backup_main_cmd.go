@@ -31,7 +31,6 @@ func init() {
 	// Tambahkan sub-command ke parent command
 	BackupCMD.AddCommand(BackupCMDAll)
 	BackupCMD.AddCommand(BackupCleanupCmd)
-	BackupCMD.AddCommand(BackupCMDDatabase)
 }
 
 // GetLogger, GetConfig adalah fungsi helper sederhana untuk modul ini

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sfDBTools/internal/structs"
 	"sfDBTools/pkg/database"
-	"sfDBTools/pkg/fs"
 	"sfDBTools/pkg/ui"
 	"strings"
 )
@@ -118,106 +117,37 @@ func (s *Service) buildMysqldumpArgs(baseDumpArgs string, dbFiltered []string, s
 func (s *Service) GetAndFilterDatabases(ctx context.Context, client *database.Client) ([]string, error) {
 	ui.PrintSubHeader("Mendapatkan dan Memfilter Database")
 
-	// 1. Dapatkan daftar database dari server
+	// Setup filter options
+	filterOpts := database.FilterOptions{
+		ExcludeSystem:    s.BackupOptions.Exclude.SystemsDB,
+		ExcludeDatabases: s.BackupOptions.Exclude.Databases,
+		IncludeFile:      s.BackupOptions.DBList, // Whitelist file (jika ada)
+	}
+
+	// Execute filtering
 	s.Logger.Info("Mendapatkan daftar database dari server...")
-	allDatabases, err := client.GetDatabaseList(ctx, client)
+	validDatabases, stats, err := database.FilterDatabases(ctx, client, filterOpts)
 	if err != nil {
-		s.Logger.Error("Gagal mendapatkan daftar database: " + err.Error())
+		s.Logger.Error("Gagal memfilter database: " + err.Error())
 		return nil, err
 	}
 
-	totalFound := len(allDatabases)
-	s.Logger.Infof("Ditemukan %d database di server.", totalFound)
-
-	// 2. Filter database
-	var validDatabases []string
-	var excludedCount int
-
-	for _, dbName := range allDatabases {
-		dbName = strings.TrimSpace(dbName)
-		if dbName == "" {
-			excludedCount++
-			continue
-		}
-
-		if s.BackupFilterDatabase(dbName) {
-			excludedCount++
-			continue
-		}
-
-		validDatabases = append(validDatabases, dbName)
-	}
-
-	// 3. Tampilkan statistik sederhana
+	// Log statistics
+	s.Logger.Infof("Ditemukan %d database di server.", stats.TotalFound)
 	s.Logger.Infof("Total database: %d, Untuk backup: %d, Dikecualikan: %d",
-		totalFound, len(validDatabases), excludedCount)
+		stats.TotalFound, stats.TotalIncluded, stats.TotalExcluded)
 
-	// 4. Validasi hasil
-	if len(validDatabases) == 0 {
-		s.Logger.Error("Tidak ada database yang valid untuk di-backup setelah filtering")
-		return nil, fmt.Errorf("tidak ada database untuk di-backup dari %d database yang ditemukan", totalFound)
-	}
-
-	if excludedCount == 0 {
+	if stats.TotalExcluded == 0 {
 		s.Logger.Info("Tidak ada database yang dikecualikan; semua database akan di-backup.")
 	}
-	// Simpan statistik filtering ke struct
+
+	// Simpan statistik filtering ke struct (mapping dari FilterStats ke FilterInfo)
 	s.FilterInfo = &structs.FilterInfo{
-		TotalDatabases:    totalFound,
-		ExcludedDatabases: excludedCount,
-		IncludedDatabases: len(validDatabases),
-		SystemDatabases:   totalFound - len(validDatabases) - excludedCount,
+		TotalDatabases:    stats.TotalFound,
+		ExcludedDatabases: stats.TotalExcluded,
+		IncludedDatabases: stats.TotalIncluded,
+		SystemDatabases:   stats.ExcludedSystem,
 	}
 
 	return validDatabases, nil
-}
-
-// BackupFilterDatabase memeriksa apakah sebuah database harus dikecualikan berdasarkan opsi exclude.
-// Mengembalikan true jika database harus dikecualikan, false jika harus disertakan.
-func (s *Service) BackupFilterDatabase(dbName string) bool {
-	// Validasi input
-	if strings.TrimSpace(dbName) == "" {
-		return true // Exclude database dengan nama kosong
-	}
-
-	// 1. Jika ada file whitelist, hanya database dalam file yang diizinkan
-	if s.BackupOptions.DBList != "" {
-		allowedDBs, err := fs.ReadLinesFromFile(s.BackupOptions.DBList)
-		if err != nil {
-			s.Logger.Warnf("Gagal membaca file db_list: %v", err)
-			return true // Exclude semua jika file gagal dibaca
-		}
-
-		// Cek apakah database ada dalam whitelist
-		for _, allowedDB := range allowedDBs {
-			if strings.TrimSpace(allowedDB) == dbName {
-				return false // Database diizinkan
-			}
-		}
-		return true // Database tidak ada dalam whitelist, exclude
-	}
-
-	// 2. Cek blacklist database yang dikecualikan
-	for _, excludeDB := range s.BackupOptions.Exclude.Databases {
-		if strings.TrimSpace(excludeDB) == dbName {
-			return true // Exclude database dalam blacklist
-		}
-	}
-
-	// 3. Cek sistem database jika opsi exclude system aktif
-	if s.BackupOptions.Exclude.SystemsDB {
-		systemDBs := map[string]bool{
-			"information_schema": true,
-			"mysql":              true,
-			"performance_schema": true,
-			"sys":                true,
-			"innodb":             true,
-		}
-		if systemDBs[dbName] {
-			return true // Exclude sistem database
-		}
-	}
-
-	// Database tidak dikecualikan
-	return false
 }

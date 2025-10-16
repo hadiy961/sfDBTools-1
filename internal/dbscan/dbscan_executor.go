@@ -2,7 +2,7 @@
 // Deskripsi : Eksekutor utama untuk database scanning dan menyimpan hasil ke database
 // Author : Hadiyatna Muflihun
 // Tanggal : 15 Oktober 2025
-// Last Modified : 15 Oktober 2025
+// Last Modified : 16 Oktober 2025
 
 package dbscan
 
@@ -14,52 +14,6 @@ import (
 	"sfDBTools/pkg/database"
 	"sfDBTools/pkg/ui"
 )
-
-// ExecuteScanCommand adalah entry point untuk database scan
-func (s *Service) ExecuteScanCommand(config ScanEntryConfig) error {
-	ctx := context.Background()
-
-	// Jika background mode, jalankan secara asynchronous
-	if s.ScanOptions.Background {
-		return s.ExecuteScanBackground(ctx, config)
-	}
-
-	// Setup session (koneksi database source)
-	sourceClient, dbFiltered, err := s.PrepareScanSession(ctx, config.HeaderTitle, config.ShowOptions)
-	if err != nil {
-		return err
-	}
-	defer sourceClient.Close()
-
-	// Koneksi ke target database untuk menyimpan hasil scan
-	var targetClient *database.Client
-	if s.ScanOptions.SaveToDB {
-		targetClient, err = s.ConnectToTargetDB(ctx)
-		if err != nil {
-			s.Logger.Warn("Gagal koneksi ke target database, hasil scan tidak akan disimpan: " + err.Error())
-			s.ScanOptions.SaveToDB = false
-		} else {
-			defer targetClient.Close()
-		}
-	}
-
-	// Lakukan scanning
-	result, err := s.ExecuteScan(ctx, sourceClient, targetClient, dbFiltered)
-	if err != nil {
-		s.Logger.Error(config.LogPrefix + " gagal: " + err.Error())
-		return err
-	}
-
-	// Tampilkan hasil
-	s.DisplayScanResult(result)
-
-	// Print success message jika ada
-	if config.SuccessMsg != "" {
-		ui.PrintSuccess(config.SuccessMsg)
-	}
-
-	return nil
-}
 
 // ExecuteScanBackground menjalankan scanning di background (asynchronous)
 func (s *Service) ExecuteScanBackground(ctx context.Context, config ScanEntryConfig) error {
@@ -76,29 +30,17 @@ func (s *Service) ExecuteScanBackground(ctx context.Context, config ScanEntryCon
 	go func() {
 		s.Logger.Infof("[%s] Memulai background scanning...", scanID)
 
-		// Setup session
-		sourceClient, dbFiltered, err := s.PrepareScanSession(ctx, "", false)
+		// Setup connections
+		sourceClient, targetClient, dbFiltered, cleanup, err := s.setupScanConnections(ctx, "", false)
 		if err != nil {
 			s.Logger.Errorf("[%s] Gagal setup session: %v", scanID, err)
 			return
 		}
-		defer sourceClient.Close()
-
-		// Koneksi ke target database
-		var targetClient *database.Client
-		if s.ScanOptions.SaveToDB {
-			targetClient, err = s.ConnectToTargetDB(ctx)
-			if err != nil {
-				s.Logger.Warnf("[%s] Gagal koneksi ke target database: %v", scanID, err)
-				s.ScanOptions.SaveToDB = false
-			} else {
-				defer targetClient.Close()
-			}
-		}
+		defer cleanup()
 
 		// Lakukan scanning
 		s.Logger.Infof("[%s] Scanning %d database...", scanID, len(dbFiltered))
-		result, err := s.ExecuteScan(ctx, sourceClient, targetClient, dbFiltered)
+		result, err := s.ExecuteScan(ctx, sourceClient, targetClient, dbFiltered, true)
 		if err != nil {
 			s.Logger.Errorf("[%s] Scanning gagal: %v", scanID, err)
 			return
@@ -123,11 +65,14 @@ func (s *Service) ExecuteScanBackground(ctx context.Context, config ScanEntryCon
 }
 
 // ExecuteScan melakukan scanning database dan menyimpan hasilnya
-func (s *Service) ExecuteScan(ctx context.Context, sourceClient *database.Client, targetClient *database.Client, dbNames []string) (*ScanResult, error) {
+// Parameter isBackground menentukan apakah output menggunakan logger (true) atau UI (false)
+func (s *Service) ExecuteScan(ctx context.Context, sourceClient *database.Client, targetClient *database.Client, dbNames []string, isBackground bool) (*ScanResult, error) {
 	startTime := time.Now()
 
-	ui.PrintHeader("SCANNING DATABASE")
-	ui.PrintInfo(fmt.Sprintf("Total database yang akan di-scan: %d", len(dbNames)))
+	if isBackground {
+		s.Logger.Info("Memulai proses scanning database...")
+		s.Logger.Infof("Total database yang akan di-scan: %d", len(dbNames))
+	}
 
 	if len(dbNames) == 0 {
 		return nil, fmt.Errorf("tidak ada database untuk di-scan")
@@ -142,7 +87,12 @@ func (s *Service) ExecuteScan(ctx context.Context, sourceClient *database.Client
 	var errors []string
 
 	if s.ScanOptions.SaveToDB && targetClient != nil {
-		ui.PrintInfo("Menyimpan hasil scan ke database...")
+		if isBackground {
+			s.Logger.Info("Menyimpan hasil scan ke database...")
+		} else {
+			ui.PrintInfo("Menyimpan hasil scan ke database...")
+		}
+
 		for dbName, detail := range detailsMap {
 			err := s.SaveDatabaseDetail(ctx, targetClient, detail)
 			if err != nil {
@@ -157,9 +107,14 @@ func (s *Service) ExecuteScan(ctx context.Context, sourceClient *database.Client
 		successCount = len(detailsMap)
 	}
 
-	// Tampilkan hasil jika diminta
-	if s.ScanOptions.DisplayResults {
+	// Tampilkan hasil jika diminta (hanya untuk foreground)
+	if s.ScanOptions.DisplayResults && !isBackground {
 		s.DisplayDetailResults(detailsMap)
+	}
+
+	// Log detail untuk background mode
+	if isBackground && s.ScanOptions.DisplayResults {
+		s.LogDetailResults(detailsMap)
 	}
 
 	duration := time.Since(startTime)
@@ -211,54 +166,4 @@ func (s *Service) SaveDatabaseDetail(ctx context.Context, client *database.Clien
 	)
 
 	return err
-}
-
-// DisplayScanResult menampilkan hasil scanning
-func (s *Service) DisplayScanResult(result *ScanResult) {
-	ui.PrintHeader("HASIL SCANNING")
-
-	data := [][]string{
-		{"Total Database", fmt.Sprintf("%d", result.TotalDatabases)},
-		{"Berhasil", ui.ColorText(fmt.Sprintf("%d", result.SuccessCount), ui.ColorGreen)},
-		{"Gagal", ui.ColorText(fmt.Sprintf("%d", result.FailedCount), ui.ColorRed)},
-		{"Durasi", result.Duration},
-	}
-
-	headers := []string{"Metrik", "Nilai"}
-	ui.FormatTable(headers, data)
-
-	if len(result.Errors) > 0 {
-		ui.PrintWarning(fmt.Sprintf("Terdapat %d error saat menyimpan ke database:", len(result.Errors)))
-		for _, errMsg := range result.Errors {
-			fmt.Printf("  • %s\n", errMsg)
-		}
-	}
-}
-
-// DisplayDetailResults menampilkan detail hasil scanning
-func (s *Service) DisplayDetailResults(detailsMap map[string]database.DatabaseDetailInfo) {
-	ui.PrintHeader("DETAIL HASIL SCANNING")
-
-	headers := []string{"Database", "Size", "Tables", "Procedures", "Functions", "Views", "Grants", "Status"}
-	var rows [][]string
-
-	for _, detail := range detailsMap {
-		status := ui.ColorText("✓ OK", ui.ColorGreen)
-		if detail.Error != "" {
-			status = ui.ColorText("✗ Error", ui.ColorRed)
-		}
-
-		rows = append(rows, []string{
-			detail.DatabaseName,
-			detail.SizeHuman,
-			fmt.Sprintf("%d", detail.TableCount),
-			fmt.Sprintf("%d", detail.ProcedureCount),
-			fmt.Sprintf("%d", detail.FunctionCount),
-			fmt.Sprintf("%d", detail.ViewCount),
-			fmt.Sprintf("%d", detail.UserGrantCount),
-			status,
-		})
-	}
-
-	ui.FormatTable(headers, rows)
 }

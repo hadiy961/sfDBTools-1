@@ -2,6 +2,7 @@ package dbscan
 
 import (
 	"fmt"
+	"sfDBTools/pkg/database"
 	"sfDBTools/pkg/ui"
 )
 
@@ -39,4 +40,75 @@ func (s *Service) DisplayFilterStats(stats *DatabaseFilterStats) {
 		{"Dikecualikan (Nama Kosong)", fmt.Sprintf("%d", stats.ExcludedEmpty)},
 	}
 	ui.FormatTable([]string{"Kategori", "Jumlah"}, data)
+}
+
+// DisplayDetailResults menampilkan detail hasil scanning
+func (s *Service) DisplayDetailResults(detailsMap map[string]database.DatabaseDetailInfo) {
+	ui.PrintHeader("DETAIL HASIL SCANNING")
+
+	headers := []string{"Database", "Size", "Tables", "Procedures", "Functions", "Views", "Grants", "Status"}
+	var rows [][]string
+
+	for _, detail := range detailsMap {
+		status := ui.ColorText("✓ OK", ui.ColorGreen)
+		if detail.Error != "" {
+			status = ui.ColorText("✗ Error", ui.ColorRed)
+		}
+
+		rows = append(rows, []string{
+			detail.DatabaseName,
+			detail.SizeHuman,
+			fmt.Sprintf("%d", detail.TableCount),
+			fmt.Sprintf("%d", detail.ProcedureCount),
+			fmt.Sprintf("%d", detail.FunctionCount),
+			fmt.Sprintf("%d", detail.ViewCount),
+			fmt.Sprintf("%d", detail.UserGrantCount),
+			status,
+		})
+	}
+
+	ui.FormatTable(headers, rows)
+}
+
+// DisplayScanResult menampilkan hasil scanning
+func (s *Service) DisplayScanResult(result *ScanResult) {
+	ui.PrintHeader("HASIL SCANNING")
+
+	data := [][]string{
+		{"Total Database", fmt.Sprintf("%d", result.TotalDatabases)},
+		{"Berhasil", ui.ColorText(fmt.Sprintf("%d", result.SuccessCount), ui.ColorGreen)},
+		{"Gagal", ui.ColorText(fmt.Sprintf("%d", result.FailedCount), ui.ColorRed)},
+		{"Durasi", result.Duration},
+	}
+
+	headers := []string{"Metrik", "Nilai"}
+	ui.FormatTable(headers, data)
+
+	if len(result.Errors) > 0 {
+		ui.PrintWarning(fmt.Sprintf("Terdapat %d error saat menyimpan ke database:", len(result.Errors)))
+		for _, errMsg := range result.Errors {
+			fmt.Printf("  • %s\n", errMsg)
+		}
+	}
+}
+
+// LogDetailResults menulis detail hasil scanning ke logger (untuk background mode)
+func (s *Service) LogDetailResults(detailsMap map[string]database.DatabaseDetailInfo) {
+	s.Logger.Info("=== Detail Hasil Scanning ===")
+
+	for dbName, detail := range detailsMap {
+		if detail.Error != "" {
+			s.Logger.Warnf("Database: %s - Status: ERROR - %s", dbName, detail.Error)
+		} else {
+			s.Logger.Infof("Database: %s - Size: %s, Tables: %d, Procedures: %d, Functions: %d, Views: %d, Grants: %d",
+				dbName,
+				detail.SizeHuman,
+				detail.TableCount,
+				detail.ProcedureCount,
+				detail.FunctionCount,
+				detail.ViewCount,
+				detail.UserGrantCount,
+			)
+		}
+	}
 }

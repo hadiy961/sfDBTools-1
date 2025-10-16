@@ -36,6 +36,7 @@ func (c *Config) DSN() string {
 		Passwd:               c.Password,
 		Net:                  "tcp",
 		Addr:                 fmt.Sprintf("%s:%d", c.Host, c.Port),
+		DBName:               c.Database, // Set database name
 		AllowNativePasswords: c.AllowNativePasswords,
 		ParseTime:            c.ParseTime,
 		Loc:                  loc,
@@ -93,10 +94,10 @@ func (c *Client) DB() *sql.DB {
 // GetMaxStatementsTime adalah helper internal untuk mengambil nilai @@max_statement_time.
 func (c *Client) GetMaxStatementsTime(ctx context.Context) (float64, error) {
 	var raw sql.NullString
-	if err := c.db.QueryRowContext(ctx, "SELECT @@max_statement_time").Scan(&raw); err != nil {
+	if err := c.db.QueryRowContext(ctx, "SHOW GLOBAL VARIABLES LIKE 'max_statement_time'").Scan(&raw); err != nil {
 		// Jika tidak ada baris, MariaDB biasanya mengembalikan nilai default,
 		// jadi error ini jarang terjadi kecuali ada masalah koneksi.
-		return 0, fmt.Errorf("query @@max_statement_time gagal: %w", err)
+		return 0, fmt.Errorf("query max_statement_time gagal: %w", err)
 	}
 
 	if !raw.Valid || raw.String == "" {
@@ -106,16 +107,16 @@ func (c *Client) GetMaxStatementsTime(ctx context.Context) (float64, error) {
 
 	val, err := strconv.ParseFloat(raw.String, 64)
 	if err != nil {
-		return 0, fmt.Errorf("parsing @@max_statement_time '%s' gagal: %w", raw.String, err)
+		return 0, fmt.Errorf("parsing max_statement_time '%s' gagal: %w", raw.String, err)
 	}
 	return val, nil
 }
 
 // SetMaxStatementsTime mengatur nilai max_statements_time untuk sesi saat ini.
 func (c *Client) SetMaxStatementsTime(ctx context.Context, seconds float64) error {
-	_, err := c.db.ExecContext(ctx, "SET SESSION max_statement_time = ?", seconds)
+	_, err := c.db.ExecContext(ctx, "SET GLOBAL max_statement_time = ?", seconds)
 	if err != nil {
-		return fmt.Errorf("gagal set SESSION max_statement_time: %w", err)
+		return fmt.Errorf("gagal set GLOBAL max_statement_time: %w", err)
 	}
 	return nil
 }

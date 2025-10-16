@@ -2,7 +2,7 @@
 // Deskripsi : Fungsi setup untuk database scanning session
 // Author : Hadiyatna Muflihun
 // Tanggal : 15 Oktober 2025
-// Last Modified : 15 Oktober 2025
+// Last Modified : 16 Oktober 2025
 
 package dbscan
 
@@ -12,24 +12,14 @@ import (
 	"sfDBTools/internal/structs"
 	"sfDBTools/pkg/database"
 	"sfDBTools/pkg/ui"
-	"strings"
 )
-
-// systemDatabases didefinisikan sebagai package-level variable untuk efisiensi
-// dan kemudahan pengelolaan. Menggunakan map untuk lookup O(1).
-var systemDatabases = map[string]struct{}{
-	"information_schema": {},
-	"mysql":              {},
-	"performance_schema": {},
-	"sys":                {},
-}
 
 // PrepareScanSession mengatur seluruh alur persiapan sebelum proses scanning dimulai.
 // Fungsi ini sekarang lebih tangguh dalam menangani resource (koneksi database)
 // dengan menggunakan `defer` untuk memastikan koneksi ditutup jika terjadi kegagalan.
 func (s *Service) PrepareScanSession(ctx context.Context, headerTitle string, showOptions bool) (client *database.Client, dbFiltered []string, err error) {
 	if headerTitle != "" {
-		ui.PrintHeader(headerTitle)
+		ui.Headers(headerTitle)
 	}
 	if showOptions {
 		s.DisplayScanOptions()
@@ -80,12 +70,10 @@ func (s *Service) ConnectToTargetDB(ctx context.Context) (*database.Client, erro
 		return nil, fmt.Errorf("gagal koneksi ke target database: %w", err)
 	}
 
-	// Uji koneksi dengan memilih database target.
-	if targetConn.Database != "" {
-		if err := client.Ping(ctx); err != nil {
-			client.Close()
-			return nil, err
-		}
+	// Verify koneksi dengan ping
+	if err := client.Ping(ctx); err != nil {
+		client.Close()
+		return nil, fmt.Errorf("gagal verifikasi koneksi: %w", err)
 	}
 
 	ui.PrintSuccess(fmt.Sprintf("Koneksi ke target database berhasil: %s@%s:%d/%s",
@@ -110,63 +98,30 @@ func (s *Service) getTargetDBConfig() structs.ServerDBConnection {
 }
 
 // GetFilteredDatabases mengambil dan memfilter daftar database sesuai aturan.
-// Logika filter yang kompleks dipecah menjadi fungsi-fungsi helper yang lebih kecil.
+// Menggunakan general database filtering system dari pkg/database
 func (s *Service) GetFilteredDatabases(ctx context.Context, client *database.Client) ([]string, *DatabaseFilterStats, error) {
-	allDatabases, err := client.GetDatabaseList(ctx, client)
+	// Setup filter options
+	filterOpts := database.FilterOptions{
+		ExcludeSystem:    s.ScanOptions.ExcludeSystem,
+		ExcludeDatabases: s.ScanOptions.ExcludeList,
+		IncludeDatabases: s.ScanOptions.IncludeList,
+	}
+
+	// Execute filtering
+	filtered, stats, err := database.FilterDatabases(ctx, client, filterOpts)
 	if err != nil {
-		return nil, nil, fmt.Errorf("tidak dapat mengambil daftar database dari server: %w", err)
+		return nil, nil, err
 	}
 
-	stats := &DatabaseFilterStats{TotalFound: len(allDatabases)}
-	filtered := make([]string, 0, len(allDatabases)) // Pra-alokasi slice untuk performa
-
-	for _, dbName := range allDatabases {
-		if s.shouldExclude(dbName, stats) {
-			continue // Lanjut ke database berikutnya jika harus dikecualikan
-		}
-		filtered = append(filtered, dbName)
+	// Convert FilterStats to DatabaseFilterStats (untuk compatibility dengan existing code)
+	dbStats := &DatabaseFilterStats{
+		TotalFound:     stats.TotalFound,
+		ToScan:         stats.TotalIncluded,
+		ExcludedSystem: stats.ExcludedSystem,
+		ExcludedByList: stats.ExcludedByList,
+		ExcludedByFile: stats.ExcludedByFile,
+		ExcludedEmpty:  stats.ExcludedEmpty,
 	}
 
-	stats.ToScan = len(filtered)
-	return filtered, stats, nil
-}
-
-// shouldExclude adalah fungsi helper yang mengoordinasikan semua aturan pengecualian.
-func (s *Service) shouldExclude(dbName string, stats *DatabaseFilterStats) bool {
-	if dbName == "" {
-		stats.ExcludedEmpty++
-		return true
-	}
-	if s.ScanOptions.ExcludeSystem && isSystemDatabase(dbName) {
-		stats.ExcludedSystem++
-		return true
-	}
-	// Periksa exclude list terlebih dahulu
-	if len(s.ScanOptions.ExcludeList) > 0 && contains(s.ScanOptions.ExcludeList, dbName) {
-		stats.ExcludedByList++
-		return true
-	}
-	// Jika include list ditentukan, hanya izinkan yang ada di dalamnya
-	if len(s.ScanOptions.IncludeList) > 0 && !contains(s.ScanOptions.IncludeList, dbName) {
-		stats.ExcludedByFile++ // Nama stat ini mungkin perlu disesuaikan jika sumbernya bukan file
-		return true
-	}
-	return false
-}
-
-// isSystemDatabase memeriksa apakah nama database termasuk database sistem.
-// Pemeriksaan menjadi sangat cepat dengan menggunakan map.
-func isSystemDatabase(dbName string) bool {
-	_, exists := systemDatabases[strings.ToLower(dbName)]
-	return exists
-}
-
-// contains adalah fungsi generik untuk memeriksa keberadaan item dalam slice.
-func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
+	return filtered, dbStats, nil
 }
