@@ -51,7 +51,7 @@ Contoh penggunaan:
 
 func init() {
 	// Set default values
-	defaultOpts := defaultvalue.GetDefaultScanOptions()
+	defaultOpts := defaultvalue.GetDefaultScanOptions("database")
 	scanDatabaseOpts = defaultOpts
 
 	// Tambahkan flags menggunakan dynamic flag system

@@ -39,7 +39,7 @@ func (s *Service) PrepareScanSession(ctx context.Context, headerTitle string, sh
 	// Jika fungsi berhasil, client akan dikembalikan dalam keadaan terbuka.
 	var success bool
 	defer func() {
-		if !success {
+		if !success && client != nil {
 			client.Close()
 		}
 	}()
@@ -85,15 +85,32 @@ func (s *Service) ConnectToTargetDB(ctx context.Context) (*database.Client, erro
 // getTargetDBConfig memisahkan logika pengambilan konfigurasi dari env vars.
 // Ini membuat ConnectToTargetDB lebih fokus pada tugas koneksi.
 func (s *Service) getTargetDBConfig() structs.ServerDBConnection {
-	// Jika konfigurasi target DB sudah ada di ScanOptions, gunakan itu.
-	// Jika tidak, fallback ke environment variables.
+	// Gunakan nilai dari ScanOptions.TargetDB yang sudah diset dari flags
+	conn := s.ScanOptions.TargetDB
+
+	// Override dengan env vars jika nilai belum diset
+	if conn.Host == "" {
+		conn.Host = database.GetEnvOrDefault("SFDB_TARGET_DB_HOST", "localhost")
+	}
+	if conn.Port == 0 {
+		conn.Port = database.GetEnvOrDefaultInt("SFDB_TARGET_DB_PORT", 3306)
+	}
+	if conn.User == "" {
+		conn.User = database.GetEnvOrDefault("SFDB_TARGET_DB_USER", "root")
+	}
+	if conn.Password == "" {
+		conn.Password = database.GetEnvOrDefault("SFDB_TARGET_DB_PASSWORD", "")
+	}
+	if conn.Database == "" {
+		conn.Database = database.GetEnvOrDefault("SFDB_TARGET_DB_NAME", "sfdbtools")
+	}
 
 	return structs.ServerDBConnection{
-		Host:     database.GetEnvOrDefault("SFDB_DB_HOST", "localhost"),
-		Port:     database.GetEnvOrDefaultInt("SFDB_DB_PORT", 3306),
-		User:     database.GetEnvOrDefault("SFDB_DB_USER", "root"),
-		Password: database.GetEnvOrDefault("SFDB_DB_PASSWORD", ""),
-		Database: database.GetEnvOrDefault("SFDB_DB_NAME", ""),
+		Host:     conn.Host,
+		Port:     conn.Port,
+		User:     conn.User,
+		Password: conn.Password,
+		Database: conn.Database,
 	}
 }
 
@@ -108,6 +125,14 @@ func (s *Service) GetFilteredDatabases(ctx context.Context, client *database.Cli
 		IncludeDatabases: s.ScanOptions.IncludeList,
 	}
 
+	// Untuk mode single, gunakan SourceDatabase yang telah ditentukan
+	if s.ScanOptions.Mode == "single" && s.ScanOptions.SourceDatabase != "" {
+		filterOpts.IncludeDatabases = []string{s.ScanOptions.SourceDatabase}
+		// Untuk single database, tidak perlu exclude system databases
+		filterOpts.ExcludeSystem = false
+	}
+
+	// Untuk mode database, gunakan file list jika tersedia
 	if s.ScanOptions.Mode == "database" && s.ScanOptions.DatabaseList.File != "" {
 		filterOpts.IncludeFile = s.ScanOptions.DatabaseList.File
 	}

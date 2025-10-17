@@ -177,7 +177,7 @@ func (s *Service) ExecuteScan(ctx context.Context, sourceClient *database.Client
 	s.Logger.Info("Memulai pengumpulan detail database...")
 
 	// Collect database details
-	detailsMap := database.CollectDatabaseDetails(ctx, sourceClient, dbNames, s.Logger)
+	detailsMap := sourceClient.CollectDatabaseDetails(ctx, dbNames, s.Logger)
 
 	// Kembalikan max_statement_time ke nilai awal
 	if originalMaxStatementTime > 0 {
@@ -204,10 +204,12 @@ func (s *Service) ExecuteScan(ctx context.Context, sourceClient *database.Client
 
 		processedCount := 0
 		lastLoggedPercent := 0
-
+		// Ambil server info dari ScanOptions
+		serverHost := s.ScanOptions.DBConfig.ServerDBConnection.Host
+		serverPort := s.ScanOptions.DBConfig.ServerDBConnection.Port
 		for dbName, detail := range detailsMap {
 			processedCount++
-			err := s.SaveDatabaseDetail(ctx, targetClient, detail)
+			err := targetClient.SaveDatabaseDetail(ctx, detail, serverHost, serverPort)
 
 			if err != nil {
 				if isBackground {
@@ -255,44 +257,4 @@ func (s *Service) ExecuteScan(ctx context.Context, sourceClient *database.Client
 		Duration:       duration.String(),
 		Errors:         errors,
 	}, nil
-}
-
-// SaveDatabaseDetail menyimpan detail database ke tabel database_details menggunakan stored procedure
-func (s *Service) SaveDatabaseDetail(ctx context.Context, client *database.Client, detail database.DatabaseDetailInfo) error {
-	// Parse collection time
-	collectionTime, err := time.Parse("2006-01-02 15:04:05", detail.CollectionTime)
-	if err != nil {
-		collectionTime = time.Now()
-	}
-
-	// Ambil server info dari ScanOptions
-	serverHost := s.ScanOptions.DBConfig.ServerDBConnection.Host
-	serverPort := s.ScanOptions.DBConfig.ServerDBConnection.Port
-
-	// Prepare error message (NULL if no error)
-	var errorMsg *string
-	if detail.Error != "" {
-		errorMsg = &detail.Error
-	}
-
-	// Call stored procedure
-	query := `CALL sp_insert_database_detail(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-
-	_, err = client.DB().ExecContext(ctx, query,
-		detail.DatabaseName,
-		serverHost,
-		serverPort,
-		detail.SizeBytes,
-		detail.SizeHuman,
-		detail.TableCount,
-		detail.ProcedureCount,
-		detail.FunctionCount,
-		detail.ViewCount,
-		detail.UserGrantCount,
-		collectionTime,
-		errorMsg,
-		0,
-	)
-
-	return err
 }

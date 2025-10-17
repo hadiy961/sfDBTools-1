@@ -38,4 +38,5 @@ func init() {
 	DbScanCmd.AddCommand(ScanAllCmd)
 	DbScanCmd.AddCommand(ScanDatabaseCmd)
 	DbScanCmd.AddCommand(ScanRescanCmd)
+	DbScanCmd.AddCommand(ScanSingleDBCmd)
 }

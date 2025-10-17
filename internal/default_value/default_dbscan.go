@@ -13,7 +13,7 @@ import (
 )
 
 // GetDefaultScanOptions mengembalikan default options untuk database scan
-func GetDefaultScanOptions() structs.ScanOptions {
+func GetDefaultScanOptions(mode string) structs.ScanOptions {
 	// Muat konfigurasi aplikasi untuk mendapatkan direktori konfigurasi
 	cfg, _ := appconfig.LoadConfigFromEnv()
 
@@ -26,6 +26,10 @@ func GetDefaultScanOptions() structs.ScanOptions {
 	opts.Encryption.Key = os.Getenv("SFDB_ENCRYPTION_KEY")
 
 	// Database Selection
+	if mode != "single" {
+		opts.DatabaseList.UseFile = true
+	}
+
 	opts.DatabaseList.File = cfg.Backup.DBList.File
 
 	// Filter Options
@@ -46,13 +50,14 @@ func GetDefaultScanOptions() structs.ScanOptions {
 	opts.TargetDB.Password = os.Getenv("SFDB_TARGET_DB_PASSWORD")
 	opts.TargetDB.Database = os.Getenv("SFDB_TARGET_DB_NAME")
 	if opts.TargetDB.Database == "" {
-		opts.TargetDB.Database = "sfDBTools"
+		opts.TargetDB.Database = "sfdbtools"
 	}
 
 	// Output Options
 	opts.DisplayResults = true
 	opts.SaveToDB = true
 	opts.Background = false
+	opts.Mode = mode
 
 	return opts
 }

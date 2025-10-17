@@ -25,6 +25,10 @@ func (s *Service) DisplayScanOptions() {
 		data = append(data, []string{"Target DB", targetInfo})
 	}
 
+	if s.ScanOptions.Mode == "single" && s.ScanOptions.SourceDatabase != "" {
+		data = append(data, []string{"Source Database", s.ScanOptions.SourceDatabase})
+	}
+
 	ui.FormatTable([]string{"Parameter", "Value"}, data)
 }
 

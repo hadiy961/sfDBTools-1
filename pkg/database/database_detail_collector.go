@@ -35,11 +35,10 @@ type DatabaseDetailInfo struct {
 // DatabaseDetailJob untuk worker pattern
 type DatabaseDetailJob struct {
 	DatabaseName string
-	Client       *Client
 }
 
 // CollectDatabaseDetails mengumpulkan detail informasi untuk semua database secara concurrent
-func CollectDatabaseDetails(ctx context.Context, client *Client, dbNames []string, logger applog.Logger) map[string]DatabaseDetailInfo {
+func (c *Client) CollectDatabaseDetails(ctx context.Context, dbNames []string, logger applog.Logger) map[string]DatabaseDetailInfo {
 	const jobTimeout = 300 * time.Second // Increase overall timeout
 
 	// If there are no databases, return early.
@@ -76,7 +75,7 @@ func CollectDatabaseDetails(ctx context.Context, client *Client, dbNames []strin
 	for w := 0; w < maxWorkers; w++ {
 		wg.Add(1)
 		workerID := w
-		go databaseDetailWorker(ctx, jobs, results, &wg, jobTimeout, logger, &started, &completed, &failed, total, workerID)
+		go c.databaseDetailWorker(ctx, jobs, results, &wg, jobTimeout, logger, &started, &completed, &failed, total, workerID)
 	}
 
 	// Send jobs
@@ -85,7 +84,6 @@ func CollectDatabaseDetails(ctx context.Context, client *Client, dbNames []strin
 		for _, dbName := range dbNames {
 			jobs <- DatabaseDetailJob{
 				DatabaseName: dbName,
-				Client:       client,
 			}
 		}
 	}()
@@ -109,7 +107,7 @@ func CollectDatabaseDetails(ctx context.Context, client *Client, dbNames []strin
 }
 
 // databaseDetailWorker adalah worker untuk mengumpulkan detail database
-func databaseDetailWorker(ctx context.Context, jobs <-chan DatabaseDetailJob, results chan<- DatabaseDetailInfo, wg *sync.WaitGroup, timeout time.Duration, logger applog.Logger, started *int32, completed *int32, failed *int32, total int, workerID int) {
+func (c *Client) databaseDetailWorker(ctx context.Context, jobs <-chan DatabaseDetailJob, results chan<- DatabaseDetailInfo, wg *sync.WaitGroup, timeout time.Duration, logger applog.Logger, started *int32, completed *int32, failed *int32, total int, workerID int) {
 	defer wg.Done()
 
 	for job := range jobs {
@@ -120,7 +118,7 @@ func databaseDetailWorker(ctx context.Context, jobs <-chan DatabaseDetailJob, re
 		jobStart := time.Now()
 		jobCtx, cancel := context.WithTimeout(ctx, timeout)
 
-		result := collectSingleDatabaseDetail(jobCtx, job.Client, job.DatabaseName, logger)
+		result := c.collectSingleDatabaseDetail(jobCtx, job.DatabaseName, logger)
 
 		// send result
 		results <- result
@@ -145,7 +143,7 @@ func databaseDetailWorker(ctx context.Context, jobs <-chan DatabaseDetailJob, re
 }
 
 // collectSingleDatabaseDetail mengumpulkan detail untuk satu database
-func collectSingleDatabaseDetail(ctx context.Context, client *Client, dbName string, logger applog.Logger) DatabaseDetailInfo {
+func (c *Client) collectSingleDatabaseDetail(ctx context.Context, dbName string, logger applog.Logger) DatabaseDetailInfo {
 	startTime := time.Now()
 	detail := DatabaseDetailInfo{
 		DatabaseName:   dbName,
@@ -167,7 +165,7 @@ func collectSingleDatabaseDetail(ctx context.Context, client *Client, dbName str
 	go func() {
 		defer metricWg.Done()
 		metricCtx := ctx
-		size, err := client.GetDatabaseSize(metricCtx, dbName)
+		size, err := c.GetDatabaseSize(metricCtx, dbName)
 		metricChan <- metricResult{"size", size, err}
 	}()
 
@@ -176,7 +174,7 @@ func collectSingleDatabaseDetail(ctx context.Context, client *Client, dbName str
 	go func() {
 		defer metricWg.Done()
 		metricCtx := ctx
-		count, err := client.GetTableCount(metricCtx, dbName)
+		count, err := c.GetTableCount(metricCtx, dbName)
 		metricChan <- metricResult{"tables", int64(count), err}
 	}()
 
@@ -185,7 +183,7 @@ func collectSingleDatabaseDetail(ctx context.Context, client *Client, dbName str
 	go func() {
 		defer metricWg.Done()
 		metricCtx := ctx
-		count, err := client.GetProcedureCount(metricCtx, dbName)
+		count, err := c.GetProcedureCount(metricCtx, dbName)
 		metricChan <- metricResult{"procedures", int64(count), err}
 	}()
 
@@ -194,7 +192,7 @@ func collectSingleDatabaseDetail(ctx context.Context, client *Client, dbName str
 	go func() {
 		defer metricWg.Done()
 		metricCtx := ctx
-		count, err := client.GetFunctionCount(metricCtx, dbName)
+		count, err := c.GetFunctionCount(metricCtx, dbName)
 		metricChan <- metricResult{"functions", int64(count), err}
 	}()
 
@@ -203,7 +201,7 @@ func collectSingleDatabaseDetail(ctx context.Context, client *Client, dbName str
 	go func() {
 		defer metricWg.Done()
 		metricCtx := ctx
-		count, err := client.GetViewCount(metricCtx, dbName)
+		count, err := c.GetViewCount(metricCtx, dbName)
 		metricChan <- metricResult{"views", int64(count), err}
 	}()
 
@@ -212,7 +210,7 @@ func collectSingleDatabaseDetail(ctx context.Context, client *Client, dbName str
 	go func() {
 		defer metricWg.Done()
 		metricCtx := ctx
-		count, err := client.GetUserGrantCount(metricCtx, dbName)
+		count, err := c.GetUserGrantCount(metricCtx, dbName)
 		metricChan <- metricResult{"user_grants", int64(count), err}
 	}()
 

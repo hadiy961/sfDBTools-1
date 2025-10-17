@@ -23,6 +23,9 @@ type ScanOptions struct {
 		UseFile   bool
 	}
 
+	// Source Database untuk mode single
+	SourceDatabase string
+
 	// Filter Options
 	ExcludeSystem bool
 	IncludeList   []string
@@ -43,5 +46,5 @@ type ScanOptions struct {
 	Background     bool // Jalankan scanning di background
 
 	// Internal use only
-	Mode string // "all" atau "database"
+	Mode string // "all" atau "database" atau "single" atau "rescan"
 }
