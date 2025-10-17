@@ -95,8 +95,8 @@ func FilterDatabases(ctx context.Context, client *Client, options FilterOptions)
 
 	// Validate result
 	if len(filtered) == 0 {
-		return nil, stats, fmt.Errorf("tidak ada database yang valid setelah filtering (found: %d, excluded: %d)",
-			stats.TotalFound, stats.TotalExcluded)
+		return nil, stats, fmt.Errorf("database %s tidak ada (found: %d, excluded: %d)",
+			strings.Join(whitelist, ", "), stats.TotalFound, stats.TotalExcluded)
 	}
 
 	return filtered, stats, nil

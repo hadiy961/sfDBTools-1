@@ -116,12 +116,20 @@ func (s *Service) buildMysqldumpArgs(baseDumpArgs string, dbFiltered []string, s
 // GetAndFilterDatabases mendapatkan dan memfilter database berdasarkan opsi exclude
 func (s *Service) GetAndFilterDatabases(ctx context.Context, client *database.Client) ([]string, error) {
 	ui.PrintSubHeader("Mendapatkan dan Memfilter Database")
-
+	var DBList string
 	// Setup filter options
+	if s.BackupOptions.UseDBList && s.BackupOptions.DBList != "" {
+		s.Logger.Info("Menggunakan file database list untuk memfilter database...")
+		DBList = s.BackupOptions.DBList
+	} else {
+		s.Logger.Info("Tidak menggunakan file database list untuk memfilter database...")
+		DBList = ""
+	}
+
 	filterOpts := database.FilterOptions{
 		ExcludeSystem:    s.BackupOptions.Exclude.SystemsDB,
 		ExcludeDatabases: s.BackupOptions.Exclude.Databases,
-		IncludeFile:      s.BackupOptions.DBList, // Whitelist file (jika ada)
+		IncludeFile:      DBList, // Whitelist file (jika ada)
 	}
 
 	// Execute filtering

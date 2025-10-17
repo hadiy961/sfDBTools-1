@@ -46,7 +46,6 @@ func (s *Service) PrepareBackupSession(ctx context.Context, headerTitle string, 
 	// Cek dan filter database yang akan di-backup
 	dbFiltered, err := s.GetAndFilterDatabases(ctx, s.Client)
 	if err != nil {
-		s.Logger.Error("Gagal mendapatkan dan memfilter database: " + err.Error())
 		// Kembalikan nilai awal max_statement_time jika ada error
 		s.KembalikanMaxStatementsTime(ctx, originalMaxStatementsTime)
 		s.Client.Close()

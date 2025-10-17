@@ -57,6 +57,7 @@ func (s *Service) DisplayBackupAllOptions() {
 		{"Exclude Users", strconv.FormatBool(s.BackupOptions.Exclude.Users)},
 		{"Exclude System Databases", strconv.FormatBool(s.BackupOptions.Exclude.SystemsDB)},
 		{"Exclude Data", strconv.FormatBool(s.BackupOptions.Exclude.Data)},
+		{"Use DBList File", strconv.FormatBool(s.BackupOptions.UseDBList)},
 		{"Database List File", s.BackupOptions.DBList},
 		{"Verification Disk Check", strconv.FormatBool(s.BackupOptions.DiskCheck)},
 		{"Capture GTID", strconv.FormatBool(s.BackupAll != nil && s.BackupAll.CaptureGtid)},

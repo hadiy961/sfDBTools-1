@@ -22,6 +22,7 @@ type BackupOptions struct {
 	DBConfig        DBConfigInfo
 	DiskCheck       bool `flag:"disk-check" env:"SFDB_VERIFICATION_DISK_CHECK" default:"true"` // Apakah cek disk diaktifkan
 	Exclude         ExcludeOptions
+	UseDBList       bool   `flag:"use-db-list" env:"SFDB_BACKUP_USE_DB_LIST" default:"false"` // Apakah menggunakan file db list
 	DBList          string `flag:"db-list" env:"SFDB_BACKUP_DB_LIST_FILE" default:""`
 	Cleanup         CleanupOptions
 }
