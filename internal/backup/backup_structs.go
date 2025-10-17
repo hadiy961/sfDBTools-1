@@ -106,12 +106,13 @@ type BackupSummary struct {
 
 // DatabaseSummaryStats berisi statistik database
 type DatabaseSummaryStats struct {
-	TotalDatabases    int `json:"total_databases"`
-	SuccessfulBackups int `json:"successful_backups"`
-	FailedBackups     int `json:"failed_backups"`
-	ExcludedDatabases int `json:"excluded_databases"`
-	SystemDatabases   int `json:"system_databases"`
-	FilteredDatabases int `json:"filtered_databases"`
+	TotalDatabases      int `json:"total_databases"`
+	SuccessfulBackups   int `json:"successful_backups"`
+	SuccessWithWarnings int `json:"success_with_warnings"`
+	FailedBackups       int `json:"failed_backups"`
+	ExcludedDatabases   int `json:"excluded_databases"`
+	SystemDatabases     int `json:"system_databases"`
+	FilteredDatabases   int `json:"filtered_databases"`
 }
 
 // OutputSummaryInfo berisi informasi file output
@@ -147,7 +148,10 @@ type DatabaseBackupInfo struct {
 	EstimatedSizeHuman  string                       `json:"estimated_size_human"`   // Estimasi ukuran (human-readable)
 	AccuracyPercentage  float64                      `json:"accuracy_percentage"`    // Akurasi estimasi (%)
 	Duration            string                       `json:"duration"`
-	DetailInfo          *database.DatabaseDetailInfo `json:"detail_info,omitempty"` // Informasi detail database
+	DetailInfo          *database.DatabaseDetailInfo `json:"detail_info,omitempty"`    // Informasi detail database
+	Status              string                       `json:"status"`                   // "success", "success_with_warnings", "failed"
+	Warnings            string                       `json:"warnings,omitempty"`       // Warning/error messages dari mysqldump
+	ErrorLogFile        string                       `json:"error_log_file,omitempty"` // Path ke file log error
 }
 
 // FailedDatabaseInfo berisi informasi database yang gagal dibackup

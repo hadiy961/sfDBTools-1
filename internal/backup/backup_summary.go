@@ -79,10 +79,22 @@ func (s *Service) CreateBackupSummary(
 
 // buildDatabaseStats membuat statistik database.
 func (s *Service) buildDatabaseStats(dbFiltered []string, successfulDBs []DatabaseBackupInfo, failedDBs []FailedDatabaseInfo) DatabaseSummaryStats {
+	// Hitung berapa yang success clean dan success with warnings
+	successClean := 0
+	successWithWarnings := 0
+	for _, db := range successfulDBs {
+		if db.Status == "success_with_warnings" {
+			successWithWarnings++
+		} else {
+			successClean++
+		}
+	}
+
 	stats := DatabaseSummaryStats{
-		TotalDatabases:    len(dbFiltered),
-		SuccessfulBackups: len(successfulDBs),
-		FailedBackups:     len(failedDBs),
+		TotalDatabases:      len(dbFiltered),
+		SuccessfulBackups:   successClean,
+		SuccessWithWarnings: successWithWarnings,
+		FailedBackups:       len(failedDBs),
 	}
 	if s.FilterInfo != nil {
 		stats.ExcludedDatabases = s.FilterInfo.ExcludedDatabases
@@ -118,17 +130,29 @@ func (s *Service) collectOutputInfo(successfulDBs []DatabaseBackupInfo) OutputSu
 	var files []SummaryFileInfo
 	var totalSize int64
 
+	// Gunakan map untuk mendeteksi file yang sama (untuk mode combined)
+	// Key: FilePath, Value: file info
+	uniqueFiles := make(map[string]SummaryFileInfo)
+
 	for _, db := range successfulDBs {
-		fileInfo := SummaryFileInfo{
-			FileName:     filepath.Base(db.OutputFile),
-			FilePath:     db.OutputFile,
-			Size:         db.FileSize,
-			SizeHuman:    db.FileSizeHuman,
-			DatabaseName: db.DatabaseName,
-			CreatedAt:    time.Now(),
+		// Jika file sudah ada dalam map (mode combined), skip
+		if _, exists := uniqueFiles[db.OutputFile]; !exists {
+			fileInfo := SummaryFileInfo{
+				FileName:     filepath.Base(db.OutputFile),
+				FilePath:     db.OutputFile,
+				Size:         db.FileSize,
+				SizeHuman:    db.FileSizeHuman,
+				DatabaseName: db.DatabaseName,
+				CreatedAt:    time.Now(),
+			}
+			uniqueFiles[db.OutputFile] = fileInfo
+			totalSize += db.FileSize
 		}
+	}
+
+	// Convert map ke slice
+	for _, fileInfo := range uniqueFiles {
 		files = append(files, fileInfo)
-		totalSize += db.FileSize
 	}
 
 	return OutputSummaryInfo{

@@ -9,7 +9,7 @@ import (
 
 // DisplaySummaryTable adalah "controller" yang mengatur tampilan summary.
 func (s *Service) DisplaySummaryTable(summary *BackupSummary) {
-	ui.Headers("BACKUP SUMMARY") // <-- Menggunakan ui.PrintHeader
+	ui.PrintHeader("BACKUP SUMMARY") // <-- Menggunakan ui.PrintHeader
 
 	s.displayGeneralInfo(summary)
 	s.displayServerInfo(summary)
@@ -41,8 +41,11 @@ func (s *Service) displayDBStats(summary *BackupSummary) {
 	data := [][]string{
 		{"Total Database", fmt.Sprintf("%d", summary.DatabaseStats.TotalDatabases)},
 		{"Berhasil", fmt.Sprintf("✅ %d", summary.DatabaseStats.SuccessfulBackups)},
-		{"Gagal", fmt.Sprintf("❌ %d", summary.DatabaseStats.FailedBackups)},
 	}
+	if summary.DatabaseStats.SuccessWithWarnings > 0 {
+		data = append(data, []string{"Berhasil dengan Warning", fmt.Sprintf("⚠️ %d", summary.DatabaseStats.SuccessWithWarnings)})
+	}
+	data = append(data, []string{"Gagal", fmt.Sprintf("❌ %d", summary.DatabaseStats.FailedBackups)})
 	if summary.DatabaseStats.ExcludedDatabases > 0 {
 		data = append(data, []string{"Dikecualikan", fmt.Sprintf("⚠️ %d", summary.DatabaseStats.ExcludedDatabases)})
 	}
@@ -112,7 +115,95 @@ func (s *Service) displaySuccessfulDBs(summary *BackupSummary) {
 	if len(summary.SuccessfulDatabases) == 0 {
 		return
 	}
-	ui.PrintSubHeader("Database Berhasil")
+
+	// Tampilan berbeda untuk mode combined vs separate
+	if summary.BackupMode == "combined" {
+		s.displayCombinedBackupFiles(summary)
+	} else {
+		s.displaySeparateBackupFiles(summary)
+	}
+
+	// Tampilkan info error log files jika ada database dengan warnings
+	hasWarnings := false
+	for _, db := range summary.SuccessfulDatabases {
+		if db.Status == "success_with_warnings" && db.ErrorLogFile != "" {
+			if !hasWarnings {
+				fmt.Println()
+				ui.PrintColoredLine("⚠️  Database dengan Warning:", ui.ColorYellow)
+				hasWarnings = true
+			}
+			ui.PrintColoredLine(fmt.Sprintf("   • %s: %s", db.DatabaseName, db.ErrorLogFile), ui.ColorYellow)
+		}
+	}
+	if hasWarnings {
+		fmt.Println()
+	}
+}
+
+// displayCombinedBackupFiles menampilkan info untuk mode combined (1 file untuk semua DB)
+func (s *Service) displayCombinedBackupFiles(summary *BackupSummary) {
+	ui.PrintSubHeader("Output File (Combined)")
+
+	// Ambil info dari database pertama (semua punya file yang sama)
+	firstDB := summary.SuccessfulDatabases[0]
+
+	// Hitung total original size dari semua database
+	var totalOriginalSize int64
+	hasWarnings := false
+	for _, db := range summary.SuccessfulDatabases {
+		totalOriginalSize += db.OriginalDBSize
+		if db.Status == "success_with_warnings" {
+			hasWarnings = true
+		}
+	}
+
+	// Hitung compression ratio berdasarkan total
+	var compressionRatio float64
+	if totalOriginalSize > 0 && firstDB.FileSize > 0 {
+		compressionRatio = float64(firstDB.FileSize) / float64(totalOriginalSize)
+	}
+
+	// Status icon
+	statusIcon := "✅"
+	if hasWarnings {
+		statusIcon = "⚠️"
+	}
+
+	// Buat list database
+	dbList := ""
+	for i, db := range summary.SuccessfulDatabases {
+		if i > 0 {
+			dbList += ", "
+		}
+		dbList += db.DatabaseName
+		if i >= 2 { // Batasi tampilan, sisanya tampilkan jumlah
+			remaining := len(summary.SuccessfulDatabases) - 3
+			if remaining > 0 {
+				dbList += fmt.Sprintf(" + %d lainnya", remaining)
+			}
+			break
+		}
+	}
+
+	headers := []string{"Databases", "File Output", "Total DB Size", "Backup Size", "Ratio", "Durasi", "Status"}
+	data := [][]string{
+		{
+			fmt.Sprintf("%d databases:\n%s", len(summary.SuccessfulDatabases), dbList),
+			filepath.Base(firstDB.OutputFile),
+			ui.FormatBytesInt64(totalOriginalSize),
+			firstDB.FileSizeHuman,
+			fmt.Sprintf("%.2f%%", compressionRatio*100),
+			firstDB.Duration,
+			statusIcon,
+		},
+	}
+
+	ui.FormatTable(headers, data)
+}
+
+// displaySeparateBackupFiles menampilkan info untuk mode separate (1 file per DB)
+func (s *Service) displaySeparateBackupFiles(summary *BackupSummary) {
+	ui.PrintSubHeader("Output Files (Separate)")
 
 	// Cek apakah ada data ukuran database asli
 	hasOriginalSize := false
@@ -127,7 +218,7 @@ func (s *Service) displaySuccessfulDBs(summary *BackupSummary) {
 	var headers []string
 
 	if hasOriginalSize {
-		headers = []string{"Database", "File Output", "DB Size", "Backup Size", "Ratio", "Durasi"}
+		headers = []string{"Database", "File Output", "DB Size", "Backup Size", "Ratio", "Durasi", "Status"}
 		for _, db := range summary.SuccessfulDatabases {
 			dbSizeStr := db.OriginalDBSizeHuman
 			if dbSizeStr == "" {
@@ -140,6 +231,12 @@ func (s *Service) displaySuccessfulDBs(summary *BackupSummary) {
 				ratioStr = fmt.Sprintf("%.2f%%", db.CompressionRatio*100)
 			}
 
+			// Status icon
+			statusIcon := "✅"
+			if db.Status == "success_with_warnings" {
+				statusIcon = "⚠️"
+			}
+
 			data = append(data, []string{
 				db.DatabaseName,
 				filepath.Base(db.OutputFile),
@@ -147,16 +244,24 @@ func (s *Service) displaySuccessfulDBs(summary *BackupSummary) {
 				db.FileSizeHuman,
 				ratioStr,
 				db.Duration,
+				statusIcon,
 			})
 		}
 	} else {
-		headers = []string{"Database", "File Output", "Ukuran", "Durasi"}
+		headers = []string{"Database", "File Output", "Ukuran", "Durasi", "Status"}
 		for _, db := range summary.SuccessfulDatabases {
+			// Status icon
+			statusIcon := "✅"
+			if db.Status == "success_with_warnings" {
+				statusIcon = "⚠️"
+			}
+
 			data = append(data, []string{
 				db.DatabaseName,
 				filepath.Base(db.OutputFile),
 				db.FileSizeHuman,
 				db.Duration,
+				statusIcon,
 			})
 		}
 	}
@@ -254,7 +359,7 @@ func (s *Service) displayDatabaseEstimatesTable(estimates []structs.BackupSizeEs
 	ui.FormatTable(headers, data)
 }
 
-func (s *Service) RingkasanDiskCheck(dbFiltered []string) error {
+func (s *Service) ringkasanDiskCheck(dbFiltered []string) error {
 	// Tampilkan ringkasan
 	ui.PrintSubHeader("RINGKASAN PENGECEKAN RUANG DISK")
 	// Informasi estimasi

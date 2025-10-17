@@ -2,7 +2,7 @@
 // Deskripsi: Fungsi untuk membaca detail database dari tabel database_details
 // Author: Hadiyatna Muflihun
 // Tanggal: 16 Oktober 2025
-// Last Modified: 16 Oktober 2025
+// Last Modified: 17 Oktober 2025
 
 package database
 
@@ -21,15 +21,10 @@ func (c *Client) GetDatabaseDetails(ctx context.Context, databaseNames []string,
 	for _, dbName := range databaseNames {
 		detail, err := c.GetSingleDatabaseDetail(ctx, dbName, serverHost, serverPort)
 		if err != nil {
-			// Skip database yang tidak ditemukan, lanjutkan ke database berikutnya
-			if err.Error() == fmt.Sprintf("detail database tidak ditemukan untuk database '%s' di server %s:%d", dbName, serverHost, serverPort) {
-				continue
-			}
 			return nil, fmt.Errorf("gagal mengambil detail untuk database '%s': %w", dbName, err)
 		}
 		if detail == nil {
-			// Jika detailnya nil, lanjutkan ke database berikutnya
-			continue
+			return nil, fmt.Errorf("detail database '%s' tidak ditemukan (nil)", dbName)
 		}
 
 		// Dereference pointer dan simpan sebagai value

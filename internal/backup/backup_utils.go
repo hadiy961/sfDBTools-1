@@ -7,6 +7,9 @@
 package backup
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
 	"sfDBTools/internal/structs"
 	"sfDBTools/pkg/compress"
 	"sfDBTools/pkg/ui"
@@ -84,4 +87,68 @@ func (s *Service) getShortage(r *structs.DiskSpaceCheckResult) uint64 {
 		return 0
 	}
 	return r.RequiredWithMargin - r.AvailableDiskSpace
+}
+
+// isFatalMysqldumpError menentukan apakah error dari mysqldump adalah fatal atau hanya warning
+// Fatal errors: koneksi gagal, permission denied, database tidak ada, dll
+// Non-fatal: view errors, trigger errors (data masih bisa di-backup)
+func (s *Service) isFatalMysqldumpError(err error, stderrOutput string) bool {
+	if err == nil {
+		return false
+	}
+
+	// Cek exit code jika tersedia
+	if exitErr, ok := err.(*exec.ExitError); ok {
+		exitCode := exitErr.ExitCode()
+		// mysqldump exit code 0 = success, 2 = warning (non-fatal)
+		if exitCode == 2 {
+			return false
+		}
+	}
+
+	// Cek pattern error yang non-fatal (warnings yang tidak menghentikan dump)
+	nonFatalPatterns := []string{
+		"Couldn't read keys from table",
+		"references invalid table(s) or column(s) or function(s)",
+		"definer/invoker of view lack rights",
+		"Warning:",
+	}
+
+	stderrLower := strings.ToLower(stderrOutput)
+	for _, pattern := range nonFatalPatterns {
+		if strings.Contains(stderrLower, strings.ToLower(pattern)) {
+			// Jika hanya ada warning patterns dan bukan error fatal lainnya
+			// Cek juga apakah ada error fatal
+			if !strings.Contains(stderrLower, "access denied") &&
+				!strings.Contains(stderrLower, "unknown database") &&
+				!strings.Contains(stderrLower, "can't connect") &&
+				!strings.Contains(stderrLower, "connection refused") {
+				return false
+			}
+		}
+	}
+
+	// Default: anggap fatal
+	return true
+}
+
+// saveErrorLog menyimpan stderr output ke file log
+// Mengembalikan path file log yang dibuat
+func (s *Service) saveErrorLog(outputDir, dbName, errorOutput string) string {
+	if errorOutput == "" {
+		return ""
+	}
+
+	// Generate nama file log
+	logFileName := dbName + "_errors.log"
+	logFilePath := filepath.Join(outputDir, logFileName)
+
+	// Simpan ke file
+	err := os.WriteFile(logFilePath, []byte(errorOutput), 0644)
+	if err != nil {
+		s.Logger.Errorf("Gagal menyimpan error log ke %s: %v", logFilePath, err)
+		return ""
+	}
+
+	return logFilePath
 }

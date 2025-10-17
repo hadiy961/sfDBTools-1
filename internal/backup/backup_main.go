@@ -23,6 +23,7 @@ type Service struct {
 	BackupOptions        *structs.BackupOptions
 	DBConfigInfo         *structs.DBConfigInfo
 	DatabaseDetail       map[string]structs.DatabaseDetail
+	DBDetail             structs.DatabaseDetail
 	DiskSpaceCheckResult *structs.DiskSpaceCheckResult
 	EstimateOptions      *structs.EstimateOptions
 	FilterInfo           *structs.FilterInfo  // Informasi statistik filtering database

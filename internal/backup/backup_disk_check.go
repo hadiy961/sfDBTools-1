@@ -10,7 +10,6 @@ import (
 	"context"
 	"sfDBTools/internal/structs"
 	"sfDBTools/pkg/compress"
-	"sfDBTools/pkg/ui"
 )
 
 // checkDiskSpaceBeforeBackup melakukan pengecekan ruang disk sebelum memulai backup
@@ -21,7 +20,6 @@ func (s *Service) checkDiskSpaceBeforeBackup(
 	dbFiltered []string,
 	backupMode string,
 ) (map[string]uint64, error) {
-	ui.PrintSubHeader("Pengecekan Ruang Disk Sebelum Backup")
 	// Tentukan compression settings
 	compressionEnabled := config.CompressionRequired
 	compType := compress.CompressionType(config.CompressionType)
@@ -30,8 +28,6 @@ func (s *Service) checkDiskSpaceBeforeBackup(
 
 	// Safety margin default 15% (bisa dikonfigurasi)
 	safetyMarginPct := 10.0
-
-	s.Logger.Infof("Direktori output: %s", config.OutputDir)
 
 	// Buat options untuk estimasi
 	s.EstimateOptions = &structs.EstimateOptions{
@@ -44,10 +40,7 @@ func (s *Service) checkDiskSpaceBeforeBackup(
 	}
 
 	// Lakukan pengecekan ruang disk dengan estimasi
-	err := s.CheckDiskSpaceForBackup(
-		config.OutputDir,
-		dbFiltered,
-	)
+	err := s.CheckDiskSpaceForBackup(config.OutputDir, dbFiltered)
 
 	if err != nil {
 		s.Logger.Warnf("Gagal melakukan pengecekan ruang disk: %v", err)
@@ -66,5 +59,9 @@ func (s *Service) checkDiskSpaceBeforeBackup(
 		s.displayDatabaseEstimatesTable(s.DiskSpaceCheckResult.DatabaseEstimates)
 	}
 
+	if err := s.ringkasanDiskCheck(dbFiltered); err != nil {
+		// ringkasanDiskCheck sudah mengembalikan error yang menjelaskan kekurangan ruang
+		return nil, err
+	}
 	return estimatesMap, nil
 }
