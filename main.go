@@ -33,14 +33,6 @@ func main() {
 		// Log error tapi jangan exit, karena tidak semua command membutuhkan database
 		appLogger.Warn(fmt.Sprintf("Gagal menginisialisasi koneksi database: %v", err))
 		appLogger.Info("Aplikasi akan berjalan tanpa koneksi database aktif")
-	} else {
-		// Tutup koneksi database saat aplikasi selesai
-		defer func() {
-			if closeErr := dbClient.Close(); closeErr != nil {
-				appLogger.Warn(fmt.Sprintf("Gagal menutup koneksi database: %v", closeErr))
-			} else {
-			}
-		}()
 	}
 
 	// 4. Buat objek dependensi untuk di-inject

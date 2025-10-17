@@ -77,7 +77,7 @@ func createZstdWriter(w io.Writer, level CompressionLevel) (*zstd.Encoder, error
 	var zstdLevel zstd.EncoderLevel
 	switch level {
 	case LevelBestSpeed:
-		zstdLevel = zstd.SpeedFastest
+		zstdLevel = zstd.SpeedFastest // param
 	case LevelFast:
 		zstdLevel = zstd.SpeedDefault
 	case LevelDefault:

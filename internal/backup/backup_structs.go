@@ -2,6 +2,7 @@ package backup
 
 import (
 	"errors"
+	"sfDBTools/internal/structs"
 	"sfDBTools/pkg/database"
 	"time"
 )
@@ -94,7 +95,7 @@ type BackupSummary struct {
 	FailedDatabases     []FailedDatabaseInfo `json:"failed_databases"`
 
 	// Detail database info
-	DatabaseDetails map[string]database.DatabaseDetailInfo `json:"database_details,omitempty"` // Detail informasi setiap database
+	DatabaseDetails map[string]structs.DatabaseDetail `json:"database_details,omitempty"` // Detail informasi setiap database
 
 	// Informasi server database yang digunakan untuk backup
 	ServerInfo ServerConnectionInfo `json:"server_info,omitempty"`
@@ -135,12 +136,15 @@ type BackupConfigSummary struct {
 
 // DatabaseBackupInfo berisi informasi database yang berhasil dibackup
 type DatabaseBackupInfo struct {
-	DatabaseName  string                       `json:"database_name"`
-	OutputFile    string                       `json:"output_file"`
-	FileSize      int64                        `json:"file_size_bytes"`
-	FileSizeHuman string                       `json:"file_size_human"`
-	Duration      string                       `json:"duration"`
-	DetailInfo    *database.DatabaseDetailInfo `json:"detail_info,omitempty"` // Informasi detail database
+	DatabaseName       string                       `json:"database_name"`
+	OutputFile         string                       `json:"output_file"`
+	FileSize           int64                        `json:"file_size_bytes"`      // Ukuran file backup actual
+	FileSizeHuman      string                       `json:"file_size_human"`      // Ukuran file backup actual (human-readable)
+	EstimatedSize      uint64                       `json:"estimated_size_bytes"` // Estimasi ukuran sebelum backup
+	EstimatedSizeHuman string                       `json:"estimated_size_human"` // Estimasi ukuran (human-readable)
+	AccuracyPercentage float64                      `json:"accuracy_percentage"`  // Akurasi estimasi (%)
+	Duration           string                       `json:"duration"`
+	DetailInfo         *database.DatabaseDetailInfo `json:"detail_info,omitempty"` // Informasi detail database
 }
 
 // FailedDatabaseInfo berisi informasi database yang gagal dibackup

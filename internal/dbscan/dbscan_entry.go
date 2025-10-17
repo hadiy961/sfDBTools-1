@@ -155,7 +155,30 @@ func (s *Service) spawnDaemonProcess(config ScanEntryConfig) error {
 // setupScanConnections melakukan setup koneksi source dan target database
 // Returns: sourceClient, targetClient, dbFiltered, cleanupFunc, error
 func (s *Service) setupScanConnections(ctx context.Context, headerTitle string, showOptions bool) (*database.Client, *database.Client, []string, func(), error) {
-	// Setup session (koneksi database source)
+	// Jika mode rescan, gunakan PrepareRescanSession
+	if s.ScanOptions.Mode == "rescan" {
+		sourceClient, targetClient, dbFiltered, err := s.PrepareRescanSession(ctx, headerTitle, showOptions)
+		if err != nil {
+			return nil, nil, nil, nil, err
+		}
+
+		// Force enable SaveToDB untuk rescan karena kita perlu update error_message
+		s.ScanOptions.SaveToDB = true
+
+		// Cleanup function untuk close semua connections
+		cleanup := func() {
+			if sourceClient != nil {
+				sourceClient.Close()
+			}
+			if targetClient != nil {
+				targetClient.Close()
+			}
+		}
+
+		return sourceClient, targetClient, dbFiltered, cleanup, nil
+	}
+
+	// Setup session (koneksi database source) untuk mode normal
 	sourceClient, dbFiltered, err := s.PrepareScanSession(ctx, headerTitle, showOptions)
 	if err != nil {
 		return nil, nil, nil, nil, err

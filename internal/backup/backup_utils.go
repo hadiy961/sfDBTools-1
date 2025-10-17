@@ -7,7 +7,11 @@
 package backup
 
 import (
+	"context"
+	"fmt"
+	"sfDBTools/internal/structs"
 	"sfDBTools/pkg/compress"
+	"sfDBTools/pkg/database"
 	"sfDBTools/pkg/ui"
 	"strconv"
 	"strings"
@@ -75,4 +79,37 @@ func (s *Service) addFileExtensions(filename string, config BackupConfig) string
 	}
 
 	return filename
+}
+
+func (s *Service) getTargetDBConfig() structs.ServerDBConnection {
+	// Jika konfigurasi target DB sudah ada di ScanOptions, gunakan itu.
+	// Jika tidak, fallback ke environment variables.
+
+	return structs.ServerDBConnection{
+		Host:     database.GetEnvOrDefault("SFDB_DB_HOST", "localhost"),
+		Port:     database.GetEnvOrDefaultInt("SFDB_DB_PORT", 3306),
+		User:     database.GetEnvOrDefault("SFDB_DB_USER", "root"),
+		Password: database.GetEnvOrDefault("SFDB_DB_PASSWORD", ""),
+		Database: database.GetEnvOrDefault("SFDB_DB_NAME", ""),
+	}
+}
+
+func (s *Service) ConnectToTargetDB(ctx context.Context) (*database.Client, error) {
+	targetConn := s.getTargetDBConfig()
+
+	client, err := database.InitializeDatabase(targetConn)
+	if err != nil {
+		return nil, fmt.Errorf("gagal koneksi ke target database: %w", err)
+	}
+
+	// Verify koneksi dengan ping
+	if err := client.Ping(ctx); err != nil {
+		client.Close()
+		return nil, fmt.Errorf("gagal verifikasi koneksi: %w", err)
+	}
+
+	ui.PrintSuccess(fmt.Sprintf("Koneksi ke target database berhasil: %s@%s:%d/%s",
+		targetConn.User, targetConn.Host, targetConn.Port, targetConn.Database))
+
+	return client, nil
 }

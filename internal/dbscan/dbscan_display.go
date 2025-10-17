@@ -99,16 +99,6 @@ func (s *Service) LogDetailResults(detailsMap map[string]database.DatabaseDetail
 	for dbName, detail := range detailsMap {
 		if detail.Error != "" {
 			s.Logger.Warnf("Database: %s - Status: ERROR - %s", dbName, detail.Error)
-		} else {
-			s.Logger.Infof("Database: %s - Size: %s, Tables: %d, Procedures: %d, Functions: %d, Views: %d, Grants: %d",
-				dbName,
-				detail.SizeHuman,
-				detail.TableCount,
-				detail.ProcedureCount,
-				detail.FunctionCount,
-				detail.ViewCount,
-				detail.UserGrantCount,
-			)
 		}
 	}
 }

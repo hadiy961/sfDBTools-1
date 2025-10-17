@@ -37,4 +37,5 @@ func init() {
 	// Tambahkan sub-commands
 	DbScanCmd.AddCommand(ScanAllCmd)
 	DbScanCmd.AddCommand(ScanDatabaseCmd)
+	DbScanCmd.AddCommand(ScanRescanCmd)
 }

@@ -77,7 +77,7 @@ func LoadAndApplyConfigFromFile(configInfo *structs.DBConfigInfo, encryptionKey 
 	if err != nil {
 		// Tetap lanjutkan meskipun gagal memuat detail, namun beri peringatan.
 		// Ini memungkinkan validasi path file tanpa harus berhasil mendekripsi.
-		logger.Warn("Gagal memuat detail konfigurasi untuk validasi: " + err.Error())
+		return fmt.Errorf("gagal memuat konfigurasi dari file: %w", err)
 	}
 
 	// Terapkan informasi yang berhasil dimuat

@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sfDBTools/pkg/database"
+	"sfDBTools/internal/structs"
 	"sfDBTools/pkg/ui" // <-- Menggunakan package UI Anda
 	"time"
 
@@ -35,7 +35,7 @@ func (s *Service) CreateBackupSummary(
 	failedDBs []FailedDatabaseInfo,
 	startTime time.Time,
 	errors []string,
-	databaseDetails map[string]database.DatabaseDetailInfo,
+	databaseDetails map[string]structs.DatabaseDetail,
 ) *BackupSummary {
 	endTime := time.Now()
 
@@ -273,11 +273,53 @@ func (s *Service) displaySuccessfulDBs(summary *BackupSummary) {
 		return
 	}
 	ui.PrintSubHeader("Database Berhasil")
-	var data [][]string
+
+	// Cek apakah ada estimasi data
+	hasEstimates := false
 	for _, db := range summary.SuccessfulDatabases {
-		data = append(data, []string{db.DatabaseName, filepath.Base(db.OutputFile), db.FileSizeHuman, db.Duration})
+		if db.EstimatedSize > 0 {
+			hasEstimates = true
+			break
+		}
 	}
-	ui.FormatTable([]string{"Database", "File Output", "Ukuran", "Durasi"}, data)
+
+	var data [][]string
+	var headers []string
+
+	if hasEstimates {
+		headers = []string{"Database", "File Output", "Estimated", "Actual", "Accuracy", "Durasi"}
+		for _, db := range summary.SuccessfulDatabases {
+			accuracyStr := "-"
+			if db.AccuracyPercentage > 0 {
+				accuracyStr = fmt.Sprintf("%.1f%%", db.AccuracyPercentage)
+			}
+			estimatedStr := db.EstimatedSizeHuman
+			if estimatedStr == "" {
+				estimatedStr = "-"
+			}
+
+			data = append(data, []string{
+				db.DatabaseName,
+				filepath.Base(db.OutputFile),
+				estimatedStr,
+				db.FileSizeHuman,
+				accuracyStr,
+				db.Duration,
+			})
+		}
+	} else {
+		headers = []string{"Database", "File Output", "Ukuran", "Durasi"}
+		for _, db := range summary.SuccessfulDatabases {
+			data = append(data, []string{
+				db.DatabaseName,
+				filepath.Base(db.OutputFile),
+				db.FileSizeHuman,
+				db.Duration,
+			})
+		}
+	}
+
+	ui.FormatTable(headers, data)
 }
 
 func (s *Service) displayDatabaseDetails(summary *BackupSummary) {
