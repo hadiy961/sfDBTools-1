@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sfDBTools/internal/applog"
 	"sfDBTools/internal/structs"
 	"strconv"
 	"time"
@@ -48,7 +49,8 @@ func (c *Config) DSN() string {
 // Client adalah struct yang memegang koneksi database aktif (*sql.DB).
 // Semua operasi ke database (Ping, Exec, Query) dilakukan melalui method dari struct ini.
 type Client struct {
-	db *sql.DB
+	db  *sql.DB
+	log applog.Logger
 }
 
 // NewClient membuat instance Client baru, membuka koneksi pool, dan melakukan ping.
@@ -74,7 +76,7 @@ func NewClient(ctx context.Context, cfg Config, timeout time.Duration, maxOpenCo
 		return nil, fmt.Errorf("gagal melakukan ping ke database: %w", err)
 	}
 
-	return &Client{db: db}, nil
+	return &Client{db: db, log: applog.NewLogger()}, nil
 }
 
 // Close menutup connection pool. Wajib dipanggil saat aplikasi selesai.

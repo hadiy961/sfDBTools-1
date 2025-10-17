@@ -87,22 +87,21 @@ func (s *Service) ConnectToTargetDB(ctx context.Context) (*database.Client, erro
 func (s *Service) getTargetDBConfig() structs.ServerDBConnection {
 	// Gunakan nilai dari ScanOptions.TargetDB yang sudah diset dari flags
 	conn := s.ScanOptions.TargetDB
-
 	// Override dengan env vars jika nilai belum diset
 	if conn.Host == "" {
-		conn.Host = database.GetEnvOrDefault("SFDB_TARGET_DB_HOST", "localhost")
+		conn.Host = database.GetEnvOrDefault("SFDB_DB_HOST", "localhost")
 	}
 	if conn.Port == 0 {
-		conn.Port = database.GetEnvOrDefaultInt("SFDB_TARGET_DB_PORT", 3306)
+		conn.Port = database.GetEnvOrDefaultInt("SFDB_DB_PORT", 3306)
 	}
 	if conn.User == "" {
-		conn.User = database.GetEnvOrDefault("SFDB_TARGET_DB_USER", "root")
+		conn.User = database.GetEnvOrDefault("SFDB_DB_USER", "root")
 	}
 	if conn.Password == "" {
-		conn.Password = database.GetEnvOrDefault("SFDB_TARGET_DB_PASSWORD", "")
+		conn.Password = database.GetEnvOrDefault("SFDB_DB_PASSWORD", "")
 	}
 	if conn.Database == "" {
-		conn.Database = database.GetEnvOrDefault("SFDB_TARGET_DB_NAME", "sfdbtools")
+		conn.Database = database.GetEnvOrDefault("SFDB_DB_NAME", "sfDBTools")
 	}
 
 	return structs.ServerDBConnection{

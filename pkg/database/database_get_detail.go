@@ -22,17 +22,32 @@ func (c *Client) GetDatabaseDetails(ctx context.Context, databaseNames []string,
 	for _, dbName := range databaseNames {
 		detail, err := c.GetSingleDatabaseDetail(ctx, dbName, serverHost, serverPort)
 		if err != nil {
+			// Jika detail tidak ditemukan, lanjutkan ke database berikutnya
+			if err.Error() == fmt.Sprintf("detail database tidak ditemukan untuk database '%s'", dbName) {
+				continue
+			}
 			return nil, fmt.Errorf("gagal mengambil detail untuk database '%s': %w", dbName, err)
-		}
-		if detail == nil {
-			return nil, fmt.Errorf("detail database '%s' tidak ditemukan (nil)", dbName)
 		}
 
 		// Dereference pointer dan simpan sebagai value
 		details[dbName] = *detail
 	}
 
-	return details, nil
+	if len(details) != len(databaseNames) {
+		// Jika tidak semua database memiliki detail, kembalikan error
+		// yang menyatakan database mana saja yang tidak ditemukan
+		var notFound []string
+		for _, dbName := range databaseNames {
+			if _, ok := details[dbName]; !ok {
+				notFound = append(notFound, dbName)
+			}
+		}
+		return nil, fmt.Errorf("tidak ada detail database yang ditemukan untuk server %s:%d, tidak ditemukan: %v", serverHost, serverPort, notFound)
+	} else {
+		// Jika detail ditemukan, kembalikan sebagai hasil
+		return details, nil
+	}
+
 }
 
 // GetSingleDatabaseDetail mengambil detail database dari tabel database_details
@@ -55,7 +70,7 @@ func (c *Client) GetSingleDatabaseDetail(ctx context.Context, databaseName, serv
 		FROM database_details
 		WHERE database_name = ? 
 			AND server_host = ? 
-			AND server_port = ?
+			AND server_port = ? AND error_message IS NULL
 		ORDER BY collection_time DESC
 		LIMIT 1
 	`
@@ -80,7 +95,7 @@ func (c *Client) GetSingleDatabaseDetail(ctx context.Context, databaseName, serv
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("detail database tidak ditemukan untuk database '%s' di server %s:%d", databaseName, serverHost, serverPort)
+			return nil, fmt.Errorf("detail database tidak ditemukan untuk database '%s'", databaseName)
 		}
 		return nil, fmt.Errorf("gagal mengambil detail database: %w", err)
 	}

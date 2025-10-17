@@ -10,6 +10,7 @@ import (
 	"os"
 	"sfDBTools/internal/appconfig"
 	"sfDBTools/internal/structs"
+	"strconv"
 )
 
 // GetDefaultScanOptions mengembalikan default options untuk database scan
@@ -36,19 +37,29 @@ func GetDefaultScanOptions(mode string) structs.ScanOptions {
 	opts.ExcludeSystem = true
 
 	// Target Database (untuk menyimpan hasil scan)
-	opts.TargetDB.Host = os.Getenv("SFDB_TARGET_DB_HOST")
+	opts.TargetDB.Host = os.Getenv("SFDB_DB_HOST")
 	if opts.TargetDB.Host == "" {
 		opts.TargetDB.Host = "localhost"
 	}
 
-	opts.TargetDB.Port = 3306
-	opts.TargetDB.User = os.Getenv("SFDB_TARGET_DB_USER")
+	portStr := os.Getenv("SFDB_DB_PORT")
+	if portStr != "" {
+		if port, err := strconv.Atoi(portStr); err == nil {
+			opts.TargetDB.Port = port
+		} else {
+			opts.TargetDB.Port = 3306
+		}
+	} else {
+		opts.TargetDB.Port = 3306
+	}
+
+	opts.TargetDB.User = os.Getenv("SFDB_DB_USER")
 	if opts.TargetDB.User == "" {
 		opts.TargetDB.User = "root"
 	}
 
-	opts.TargetDB.Password = os.Getenv("SFDB_TARGET_DB_PASSWORD")
-	opts.TargetDB.Database = os.Getenv("SFDB_TARGET_DB_NAME")
+	opts.TargetDB.Password = os.Getenv("SFDB_DB_PASSWORD")
+	opts.TargetDB.Database = os.Getenv("SFDB_DB_NAME")
 	if opts.TargetDB.Database == "" {
 		opts.TargetDB.Database = "sfdbtools"
 	}

@@ -3,16 +3,12 @@ package backup
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime" // Diperlukan untuk konkurensi
-	"sfDBTools/pkg/compress"
 	"sfDBTools/pkg/database"
-	"sfDBTools/pkg/encrypt"
+	"sfDBTools/pkg/input"
 	"sfDBTools/pkg/ui"
-	"strings"
 	"sync" // Diperlukan untuk konkurensi
 	"time"
 )
@@ -54,8 +50,32 @@ func (s *Service) ExecuteBackup(ctx context.Context, dbFiltered []string, backup
 
 			s.DatabaseDetail, err = targetClient.GetDatabaseDetails(ctx, dbNames, s.DBConfigInfo.ServerDBConnection.Host, s.DBConfigInfo.ServerDBConnection.Port)
 			if err != nil {
-				s.Logger.Warnf("Gagal mengumpulkan detail database: %v", err)
-				return err
+				// Jika detail tidak ditemukan untuk beberapa database, laporkan error, dan kasih user pilihan apakah ingin scan database terlebih dahulu
+				ok, errIn := input.AskYesNo("Gagal mengambil detail database sebelum backup\nApakah Anda ingin menjalankan database scan terlebih dahulu untuk mengumpulkan detail yang hilang? (y/n): ", true)
+				if errIn != nil {
+					return fmt.Errorf("gagal mendapatkan konfirmasi dari user: %w", errIn)
+				}
+				if ok {
+					s.Logger.Info("Menjalankan database scan untuk mengumpulkan detail yang hilang...")
+
+					// Panggil fungsi helper untuk menjalankan database scan
+					if err := s.runDatabaseScanForBackup(ctx, dbNames); err != nil {
+						s.Logger.Errorf("Database scan gagal: %v", err)
+						return fmt.Errorf("gagal menjalankan database scan: %w", err)
+					}
+
+					// Coba ambil detail lagi setelah scan
+					s.Logger.Info("Mengumpulkan detail database setelah scan...")
+					s.DatabaseDetail, err = targetClient.GetDatabaseDetails(ctx, dbNames, s.DBConfigInfo.ServerDBConnection.Host, s.DBConfigInfo.ServerDBConnection.Port)
+					if err != nil {
+						return fmt.Errorf("gagal mengambil detail database setelah scan: %w", err)
+					}
+					s.Logger.Infof("Berhasil mengumpulkan detail untuk %d database setelah scan.", len(s.DatabaseDetail))
+
+				} else {
+					return fmt.Errorf("pengumpulan detail database dibatalkan oleh user: %w", err)
+				}
+
 			} else {
 				s.Logger.Infof("Berhasil mengumpulkan detail untuk %d database dari tabel database_details.", len(s.DatabaseDetail))
 			}
@@ -355,80 +375,4 @@ func (s *Service) executeBackupCombined(ctx context.Context, config BackupConfig
 	s.Logger.Info("Proses backup semua database selesai.")
 	s.Logger.Infof("File backup tersimpan di: %s", fullOutputPath)
 	return res
-}
-
-// executeMysqldumpWithPipe menjalankan mysqldump dengan pipe untuk kompresi dan enkripsi.
-// Mengembalikan error untuk fatal errors dan stderr output untuk warnings/non-fatal errors
-func (s *Service) executeMysqldumpWithPipe(ctx context.Context, mysqldumpArgs []string, outputPath string, compressionRequired bool, compressionType string) (string, error) {
-	outputFile, err := os.Create(outputPath)
-	if err != nil {
-		return "", fmt.Errorf("gagal membuat file output: %w", err)
-	}
-	defer outputFile.Close()
-
-	var writer io.Writer = outputFile
-	var closers []io.Closer
-
-	// Urutan layer: mysqldump -> Compression -> Encryption -> File
-	if s.BackupOptions.Encryption.Enabled {
-		encryptionKey := s.BackupOptions.Encryption.Key
-		if encryptionKey == "" {
-			resolvedKey, source, err := encrypt.ResolveEncryptionKey("")
-			if err != nil {
-				return "", fmt.Errorf("gagal mendapatkan kunci enkripsi: %w", err)
-			}
-			encryptionKey = resolvedKey
-			s.Logger.Infof("Kunci enkripsi diperoleh dari: %s", source)
-		}
-
-		encryptingWriter, err := encrypt.NewEncryptingWriter(writer, []byte(encryptionKey))
-		if err != nil {
-			return "", fmt.Errorf("gagal membuat encrypting writer: %w", err)
-		}
-		closers = append(closers, encryptingWriter)
-		writer = encryptingWriter
-	}
-
-	if compressionRequired {
-		compressionConfig := compress.CompressionConfig{
-			Type:  compress.CompressionType(compressionType),
-			Level: compress.CompressionLevel(s.BackupOptions.Compression.Level),
-		}
-		compressingWriter, err := compress.NewCompressingWriter(writer, compressionConfig)
-		if err != nil {
-			return "", fmt.Errorf("gagal membuat compressing writer: %w", err)
-		}
-		closers = append(closers, compressingWriter)
-		writer = compressingWriter
-	}
-
-	defer func() {
-		for i := len(closers) - 1; i >= 0; i-- {
-			if err := closers[i].Close(); err != nil {
-				s.Logger.Errorf("Error closing writer: %v", err)
-			}
-		}
-	}()
-
-	cmd := exec.CommandContext(ctx, "mysqldump", mysqldumpArgs...)
-	cmd.Stdout = writer
-
-	// Capture stderr untuk menangkap warnings dan errors
-	var stderrBuf strings.Builder
-	cmd.Stderr = &stderrBuf
-
-	// logArgs := s.sanitizeArgsForLogging(mysqldumpArgs)
-	// s.Logger.Infof("Command: mysqldump %s", strings.Join(logArgs, " "))
-
-	if err := cmd.Run(); err != nil {
-		stderrOutput := stderrBuf.String()
-		// Cek apakah ini error fatal atau hanya warning
-		if s.isFatalMysqldumpError(err, stderrOutput) {
-			return stderrOutput, fmt.Errorf("mysqldump gagal: %w", err)
-		}
-		// Jika bukan fatal error, kembalikan stderr sebagai warning
-		return stderrOutput, nil
-	}
-
-	return stderrBuf.String(), nil
 }

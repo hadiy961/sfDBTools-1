@@ -75,7 +75,7 @@ func (c *Client) CollectDatabaseDetails(ctx context.Context, dbNames []string, l
 	for w := 0; w < maxWorkers; w++ {
 		wg.Add(1)
 		workerID := w
-		go c.databaseDetailWorker(ctx, jobs, results, &wg, jobTimeout, logger, &started, &completed, &failed, total, workerID)
+		go c.databaseDetailWorker(ctx, jobs, results, &wg, jobTimeout, &started, &completed, &failed, total, workerID)
 	}
 
 	// Send jobs
@@ -107,7 +107,7 @@ func (c *Client) CollectDatabaseDetails(ctx context.Context, dbNames []string, l
 }
 
 // databaseDetailWorker adalah worker untuk mengumpulkan detail database
-func (c *Client) databaseDetailWorker(ctx context.Context, jobs <-chan DatabaseDetailJob, results chan<- DatabaseDetailInfo, wg *sync.WaitGroup, timeout time.Duration, logger applog.Logger, started *int32, completed *int32, failed *int32, total int, workerID int) {
+func (c *Client) databaseDetailWorker(ctx context.Context, jobs <-chan DatabaseDetailJob, results chan<- DatabaseDetailInfo, wg *sync.WaitGroup, timeout time.Duration, started *int32, completed *int32, failed *int32, total int, workerID int) {
 	defer wg.Done()
 
 	for job := range jobs {
@@ -118,7 +118,7 @@ func (c *Client) databaseDetailWorker(ctx context.Context, jobs <-chan DatabaseD
 		jobStart := time.Now()
 		jobCtx, cancel := context.WithTimeout(ctx, timeout)
 
-		result := c.collectSingleDatabaseDetail(jobCtx, job.DatabaseName, logger)
+		result := c.collectSingleDatabaseDetail(jobCtx, job.DatabaseName)
 
 		// send result
 		results <- result
@@ -131,19 +131,17 @@ func (c *Client) databaseDetailWorker(ctx context.Context, jobs <-chan DatabaseD
 
 		// log per-database finish and overall progress
 		elapsed := time.Since(jobStart)
-		if result.Error != "" {
-			logger.Warnf("worker-%d: finished %s in %v (error=%s)", workerID, job.DatabaseName, elapsed, result.Error)
-		}
+		// c.log.Warnf("worker-%d: finished %s in %v (error=%s)", workerID, job.DatabaseName, elapsed, result.Error)
 
 		percent := (float64(done) / float64(total)) * 100.0
-		logger.Infof("Progress: %d/%d completed (%.1f%%), failed=%d (%s)", done, total, percent, atomic.LoadInt32(failed), job.DatabaseName)
+		c.log.Infof("Progress: %d/%d completed (%.1f%%), failed=%d (%s), in %v", done, total, percent, atomic.LoadInt32(failed), job.DatabaseName, elapsed)
 
 		cancel()
 	}
 }
 
 // collectSingleDatabaseDetail mengumpulkan detail untuk satu database
-func (c *Client) collectSingleDatabaseDetail(ctx context.Context, dbName string, logger applog.Logger) DatabaseDetailInfo {
+func (c *Client) collectSingleDatabaseDetail(ctx context.Context, dbName string) DatabaseDetailInfo {
 	startTime := time.Now()
 	detail := DatabaseDetailInfo{
 		DatabaseName:   dbName,
@@ -247,9 +245,7 @@ func (c *Client) collectSingleDatabaseDetail(ctx context.Context, dbName string,
 
 	if len(errors) > 0 {
 		detail.Error = fmt.Sprintf("Errors: %v", errors)
-		if logger != nil {
-			logger.Warnf("Error mengumpulkan detail database %s: %v", dbName, errors)
-		}
+		c.log.Warningf("Error mengumpulkan detail database %s: %v", dbName, errors)
 	}
 
 	return detail

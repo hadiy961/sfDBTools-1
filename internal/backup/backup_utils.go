@@ -7,11 +7,15 @@
 package backup
 
 import (
+	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sfDBTools/internal/dbscan"
 	"sfDBTools/internal/structs"
 	"sfDBTools/pkg/compress"
+	"sfDBTools/pkg/database"
 	"sfDBTools/pkg/ui"
 	"strconv"
 	"strings"
@@ -152,4 +156,65 @@ func (s *Service) saveErrorLog(outputDir, dbName, errorOutput string) string {
 	}
 
 	return logFilePath
+}
+
+// runDatabaseScanForBackup menjalankan database scan untuk mengumpulkan detail database yang hilang
+// sebelum proses backup dimulai. Fungsi ini menggunakan dbscan service untuk melakukan scan.
+func (s *Service) runDatabaseScanForBackup(ctx context.Context, dbNames []string) error {
+	s.Logger.Info("Mempersiapkan database scan...")
+
+	// Buat dbscan service dengan konfigurasi dari backup service
+	dbscanSvc := dbscan.NewService(s.Logger, s.Config)
+
+	// Setup scan options dari backup service context
+	scanOptions := structs.ScanOptions{
+		DBConfig:       *s.DBConfigInfo,
+		ExcludeSystem:  false, // Tidak exclude system database karena kita scan specific databases
+		IncludeList:    dbNames,
+		SaveToDB:       true, // Simpan hasil scan ke database
+		Background:     false,
+		Mode:           "database",
+		DisplayResults: true,
+	}
+
+	dbscanSvc.SetScanOptions(scanOptions)
+
+	s.Logger.Infof("Melakukan scan untuk %d database...", len(dbNames))
+	ui.PrintSubHeader("Database Scan - Mengumpulkan Detail Database")
+
+	// Setup connections menggunakan fungsi internal dbscan
+	sourceClient, err := database.InitializeDatabase(s.DBConfigInfo.ServerDBConnection)
+	if err != nil {
+		return fmt.Errorf("gagal inisialisasi koneksi source: %w", err)
+	}
+	defer sourceClient.Close()
+
+	// Koneksi ke target database untuk menyimpan hasil
+	targetClient, err := dbscanSvc.ConnectToTargetDB(ctx)
+	if err != nil {
+		return fmt.Errorf("gagal koneksi ke target database: %w", err)
+	}
+	defer targetClient.Close()
+
+	// Jalankan scan
+	result, err := dbscanSvc.ExecuteScan(ctx, sourceClient, targetClient, dbNames, false)
+	if err != nil {
+		return fmt.Errorf("gagal menjalankan scan: %w", err)
+	}
+
+	// Log hasil scan
+	s.Logger.Infof("Scan selesai - Berhasil: %d, Gagal: %d", result.SuccessCount, result.FailedCount)
+
+	if result.FailedCount > 0 {
+		s.Logger.Warnf("Beberapa database gagal di-scan (%d database)", result.FailedCount)
+		if len(result.Errors) > 0 {
+			for i, errMsg := range result.Errors {
+				s.Logger.Debugf("  %d. %s", i+1, errMsg)
+			}
+		}
+	}
+
+	ui.PrintSuccess(fmt.Sprintf("Database scan selesai - %d database berhasil di-scan", result.SuccessCount))
+
+	return nil
 }
