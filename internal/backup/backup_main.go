@@ -10,19 +10,24 @@ import (
 	config "sfDBTools/internal/appconfig"
 	log "sfDBTools/internal/applog"
 	"sfDBTools/internal/structs"
+	"sfDBTools/pkg/database"
 )
 
 // Service adalah layanan inti yang menjalankan logika dbconfig.
 type Service struct {
-	Logger        log.Logger
-	Config        *config.Config
-	BackupDB      *structs.BackupDBFlags
-	BackupAll     *structs.BackupAllFlags
-	BackupInfo    *structs.BackupInfo
-	BackupOptions *structs.BackupOptions
-	DBConfigInfo  *structs.DBConfigInfo
-	FilterInfo    *structs.FilterInfo  // Informasi statistik filtering database
-	FilterStats   *DatabaseFilterStats // Statistik filtering database
+	Logger               log.Logger
+	Config               *config.Config
+	BackupDB             *structs.BackupDBFlags
+	BackupAll            *structs.BackupAllFlags
+	BackupInfo           *structs.BackupInfo
+	BackupOptions        *structs.BackupOptions
+	DBConfigInfo         *structs.DBConfigInfo
+	DatabaseDetail       map[string]structs.DatabaseDetail
+	DiskSpaceCheckResult *structs.DiskSpaceCheckResult
+	EstimateOptions      *structs.EstimateOptions
+	FilterInfo           *structs.FilterInfo  // Informasi statistik filtering database
+	FilterStats          *DatabaseFilterStats // Statistik filtering database
+	Client               *database.Client     // Client database aktif selama backup
 }
 
 // NewService membuat instance baru dari Service dengan dependensi yang di-inject.

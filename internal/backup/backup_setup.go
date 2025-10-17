@@ -1,5 +1,5 @@
-// File : internal/backup/backup_common.go
-// Deskripsi : Common functions untuk mengurangi duplikasi kode backup
+// File : internal/backup/backup_setup.go
+// Deskripsi : Fungsi terpadu untuk setup sesi backup dan validasi output directory.
 // Author : Hadiyatna Muflihun
 // Tanggal : 2024-10-15
 // Last Modified : 2024-10-15
@@ -8,29 +8,19 @@ package backup
 
 import (
 	"context"
-	"log"
 	"sfDBTools/pkg/database"
 	"sfDBTools/pkg/fs"
 	"sfDBTools/pkg/ui"
 )
 
-// BackupConfig menyimpan konfigurasi backup yang umum digunakan
-type BackupConfig struct {
-	BaseDumpArgs        string
-	OutputDir           string
-	CompressionType     string
-	CompressionRequired bool
-	EncryptionEnabled   bool
-}
-
 // PrepareBackupSession menangani setup awal yang sama untuk semua jenis backup
 // Mengembalikan client, filtered databases, original max statements time, dan error
-func (s *Service) PrepareBackupSession(ctx context.Context, headerTitle string, showOptions bool) (*database.Client, []string, float64, error) {
+func (s *Service) PrepareBackupSession(ctx context.Context, headerTitle string, showOptions bool) ([]string, float64, error) {
 	ui.Headers(headerTitle)
 
 	// Check flag configuration file
 	if err := s.CheckAndSelectConfigFile(); err != nil {
-		return nil, nil, 0, err
+		return nil, 0, err
 	}
 
 	// Display options jika diminta
@@ -39,30 +29,31 @@ func (s *Service) PrepareBackupSession(ctx context.Context, headerTitle string, 
 	}
 
 	// Membuat klien baru dengan semua konfigurasi di atas
-	client, err := database.InitializeDatabase(s.DBConfigInfo.ServerDBConnection)
+	var err error
+	s.Client, err = database.InitializeDatabase(s.DBConfigInfo.ServerDBConnection)
 	if err != nil {
-		log.Fatalf("Error: %v", err)
+		return nil, 0, err
 	}
 
 	// Get, Set dan cek max_statement_time untuk sesi ini
-	originalMaxStatementsTime, err := s.AturMaxStatementsTime(ctx, client)
+	originalMaxStatementsTime, err := s.AturMaxStatementsTime(ctx, s.Client)
 	if err != nil {
 		s.Logger.Warn("Gagal mengatur max_statement_time: " + err.Error())
-		client.Close()
-		return nil, nil, 0, err
+		s.Client.Close()
+		return nil, 0, err
 	}
 
 	// Cek dan filter database yang akan di-backup
-	dbFiltered, err := s.GetAndFilterDatabases(ctx, client)
+	dbFiltered, err := s.GetAndFilterDatabases(ctx, s.Client)
 	if err != nil {
 		s.Logger.Error("Gagal mendapatkan dan memfilter database: " + err.Error())
 		// Kembalikan nilai awal max_statement_time jika ada error
-		s.KembalikanMaxStatementsTime(ctx, client, originalMaxStatementsTime)
-		client.Close()
-		return nil, nil, 0, err
+		s.KembalikanMaxStatementsTime(ctx, originalMaxStatementsTime)
+		s.Client.Close()
+		return nil, 0, err
 	}
 
-	return client, dbFiltered, originalMaxStatementsTime, nil
+	return dbFiltered, originalMaxStatementsTime, nil
 }
 
 // SetupBackupExecution mempersiapkan konfigurasi backup yang umum

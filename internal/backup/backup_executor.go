@@ -10,7 +10,6 @@ import (
 	"runtime" // Diperlukan untuk konkurensi
 	"sfDBTools/internal/structs"
 	"sfDBTools/pkg/compress"
-	"sfDBTools/pkg/database"
 	"sfDBTools/pkg/encrypt"
 	"sfDBTools/pkg/ui"
 	"sync" // Diperlukan untuk konkurensi
@@ -19,7 +18,7 @@ import (
 
 // ExecuteBackup adalah satu-satunya entry point untuk menjalankan proses backup.
 // Ia mengorkestrasi seluruh alur: setup, eksekusi, pengumpulan detail, dan pembuatan summary.
-func (s *Service) ExecuteBackup(ctx context.Context, client *database.Client, dbFiltered []string, backupMode string, collectDetails bool) error {
+func (s *Service) ExecuteBackup(ctx context.Context, dbFiltered []string, backupMode string, collectDetails bool) error {
 	// 1. Setup konfigurasi backup
 	config, err := s.SetupBackupExecution()
 	if err != nil {
@@ -35,34 +34,9 @@ func (s *Service) ExecuteBackup(ctx context.Context, client *database.Client, db
 	needDatabaseDetails := collectDetails || s.BackupOptions.DiskCheck
 
 	if needDatabaseDetails {
-		if len(dbFiltered) > 0 {
-			// Pastikan nama database unik
-			uniqueDBs := make(map[string]bool)
-			for _, dbName := range dbFiltered {
-				uniqueDBs[dbName] = true
-			}
-			dbNames := make([]string, 0, len(uniqueDBs))
-			for dbName := range uniqueDBs {
-				dbNames = append(dbNames, dbName)
-			}
-
-			s.Logger.Info("Mengumpulkan detail informasi database")
-			var targetClient *database.Client
-			targetClient, err = s.ConnectToTargetDB(ctx)
-			if err != nil {
-				return fmt.Errorf("gagal koneksi ke target database: %w", err)
-			}
-
-			databaseDetails, err = database.GetDatabaseDetails(ctx, dbNames, s.DBConfigInfo.ServerDBConnection.Host, s.DBConfigInfo.ServerDBConnection.Port, targetClient)
-			if err != nil {
-				s.Logger.Warnf("Gagal mengumpulkan detail database: %v", err)
-				databaseDetails = make(map[string]structs.DatabaseDetail)
-			} else {
-				s.Logger.Infof("Berhasil mengumpulkan detail untuk %d database dari tabel database_details.", len(databaseDetails))
-			}
-		} else {
-			s.Logger.Info("Tidak ada database untuk dikumpulkan detailnya sebelum backup.")
-			databaseDetails = make(map[string]structs.DatabaseDetail)
+		// Kumpulkan detail database sebelum backup
+		if err := s.GetDBDetail(ctx, dbFiltered); err != nil {
+			return fmt.Errorf("gagal mengumpulkan detail database: %w", err)
 		}
 	}
 
@@ -70,7 +44,7 @@ func (s *Service) ExecuteBackup(ctx context.Context, client *database.Client, db
 	var estimatesMap map[string]uint64 // Map database name ke estimasi ukuran
 	if s.BackupOptions.DiskCheck {
 		var err error
-		estimatesMap, err = s.checkDiskSpaceBeforeBackup(ctx, config, dbFiltered, databaseDetails, backupMode)
+		estimatesMap, err = s.checkDiskSpaceBeforeBackup(ctx, config, dbFiltered, backupMode)
 		if err != nil {
 			return fmt.Errorf("pengecekan ruang disk gagal: %w", err)
 		}
@@ -82,16 +56,16 @@ func (s *Service) ExecuteBackup(ctx context.Context, client *database.Client, db
 	ui.PrintSubHeader("Memulai Proses Backup")
 	// 4. Lakukan backup berdasarkan mode
 	if backupMode == "separate" {
-		result = s.executeBackupSeparate(ctx, config, dbFiltered, estimatesMap)
+		result = s.executeBackupSeparate(ctx, config, dbFiltered, estimatesMap, databaseDetails)
 	} else {
-		result = s.executeBackupCombined(ctx, config, dbFiltered, estimatesMap)
+		result = s.executeBackupCombined(ctx, config, dbFiltered, estimatesMap, databaseDetails)
 	}
 
 	// 5. Buat, simpan, dan tampilkan summary
-	summary := s.CreateBackupSummary(backupMode, dbFiltered, result.successful, result.failed, startTime, result.errors, databaseDetails)
+	summary := s.CreateBackupSummary(backupMode, dbFiltered, result.successful, result.failed, startTime, result.errors)
 	// Populate server version using the active client if available
-	if client != nil {
-		if ver, err := client.GetVersion(ctx); err == nil {
+	if s.Client != nil {
+		if ver, err := s.Client.GetVersion(ctx); err == nil {
 			summary.ServerInfo.Version = ver
 		} else {
 			s.Logger.Debugf("Gagal mengambil versi server dari client aktif: %v", err)
@@ -116,7 +90,7 @@ func (s *Service) ExecuteBackup(ctx context.Context, client *database.Client, db
 }
 
 // executeBackupSeparate melakukan backup dengan file terpisah per database secara paralel menggunakan worker pool.
-func (s *Service) executeBackupSeparate(ctx context.Context, config BackupConfig, dbFiltered []string, estimatesMap map[string]uint64) backupResult {
+func (s *Service) executeBackupSeparate(ctx context.Context, config BackupConfig, dbFiltered []string, estimatesMap map[string]uint64, databaseDetails map[string]structs.DatabaseDetail) backupResult {
 	dbCount := len(dbFiltered)
 	s.Logger.Infof("Total database yang akan di-backup: %d", dbCount)
 
@@ -139,7 +113,8 @@ func (s *Service) executeBackupSeparate(ctx context.Context, config BackupConfig
 			for dbName := range jobs {
 				s.Logger.Infof("[Worker %d] Memproses database: %s", workerID, dbName)
 				estimatedSize := estimatesMap[dbName]
-				info, err := s.backupSingleDatabase(ctx, config, dbName, estimatedSize)
+				dbDetail := databaseDetails[dbName] // Ambil detail database
+				info, err := s.backupSingleDatabase(ctx, config, dbName, estimatedSize, dbDetail)
 				results <- jobResult{info: info, err: err, dbName: dbName}
 			}
 		}(w)
@@ -176,7 +151,7 @@ func (s *Service) executeBackupSeparate(ctx context.Context, config BackupConfig
 }
 
 // backupSingleDatabase menangani logika untuk membackup satu database.
-func (s *Service) backupSingleDatabase(ctx context.Context, config BackupConfig, dbName string, estimatedSize uint64) (DatabaseBackupInfo, error) {
+func (s *Service) backupSingleDatabase(ctx context.Context, config BackupConfig, dbName string, estimatedSize uint64, dbDetail structs.DatabaseDetail) (DatabaseBackupInfo, error) {
 	startTime := time.Now()
 
 	baseOutputFile, err := s.GenerateBackupFilename(dbName)
@@ -197,31 +172,47 @@ func (s *Service) backupSingleDatabase(ctx context.Context, config BackupConfig,
 		fileSize = fileInfo.Size()
 	}
 
-	// Hitung akurasi estimasi
-	// Accuracy = (Actual / Estimated) * 100
-	// Jika actual lebih kecil dari estimated, maka accuracy < 100% (estimasi terlalu tinggi)
-	// Jika actual lebih besar dari estimated, maka accuracy > 100% (estimasi terlalu rendah)
+	// Hitung compression ratio dan akurasi estimasi
+	// CompressionRatio = BackupFileSize / OriginalDBSize
+	// Misalnya: 0.15 = 15% dari ukuran asli (kompresi 85%)
+	var compressionRatio float64
 	var accuracyPct float64
 	var estimatedSizeHuman string
+	var originalDBSize int64
+	var originalDBSizeHuman string
+
+	// Dapatkan ukuran database asli dari detail
+	if dbDetail.SizeBytes > 0 {
+		originalDBSize = dbDetail.SizeBytes
+		originalDBSizeHuman = dbDetail.SizeHuman
+		if fileSize > 0 {
+			compressionRatio = float64(fileSize) / float64(originalDBSize)
+		}
+	}
+
+	// Hitung akurasi estimasi disk space
 	if estimatedSize > 0 && fileSize > 0 {
 		accuracyPct = (float64(fileSize) / float64(estimatedSize)) * 100
 		estimatedSizeHuman = s.formatFileSize(int64(estimatedSize))
 	}
 
 	return DatabaseBackupInfo{
-		DatabaseName:       dbName,
-		OutputFile:         fullOutputPath,
-		FileSize:           fileSize,
-		FileSizeHuman:      s.formatFileSize(fileSize),
-		EstimatedSize:      estimatedSize,
-		EstimatedSizeHuman: estimatedSizeHuman,
-		AccuracyPercentage: accuracyPct,
-		Duration:           s.formatDuration(time.Since(startTime)),
+		DatabaseName:        dbName,
+		OutputFile:          fullOutputPath,
+		FileSize:            fileSize,
+		FileSizeHuman:       s.formatFileSize(fileSize),
+		OriginalDBSize:      originalDBSize,
+		OriginalDBSizeHuman: originalDBSizeHuman,
+		CompressionRatio:    compressionRatio,
+		EstimatedSize:       estimatedSize,
+		EstimatedSizeHuman:  estimatedSizeHuman,
+		AccuracyPercentage:  accuracyPct,
+		Duration:            ui.FormatDuration(time.Since(startTime)),
 	}, nil
 }
 
 // executeBackupCombined melakukan backup dengan satu file gabungan (sekuensial).
-func (s *Service) executeBackupCombined(ctx context.Context, config BackupConfig, dbFiltered []string, estimatesMap map[string]uint64) backupResult {
+func (s *Service) executeBackupCombined(ctx context.Context, config BackupConfig, dbFiltered []string, estimatesMap map[string]uint64, databaseDetails map[string]structs.DatabaseDetail) backupResult {
 	s.Logger.Info("Memulai proses backup...")
 
 	var res backupResult
@@ -260,18 +251,31 @@ func (s *Service) executeBackupCombined(ctx context.Context, config BackupConfig
 		fileSize = fileInfo.Size()
 	}
 
-	// Hitung total estimasi untuk combined backup
+	// Hitung total estimasi dan total ukuran database asli untuk combined backup
 	var totalEstimated uint64
+	var totalOriginalSize int64
 	for _, dbName := range dbFiltered {
 		if est, ok := estimatesMap[dbName]; ok {
 			totalEstimated += est
 		}
+		if detail, ok := databaseDetails[dbName]; ok {
+			totalOriginalSize += detail.SizeBytes
+		}
 	}
 
-	// Hitung akurasi estimasi untuk combined backup
-	// Accuracy = (Actual / Estimated) * 100
+	// Hitung compression ratio dan akurasi estimasi untuk combined backup
+	// CompressionRatio = BackupFileSize / TotalOriginalDBSize
+	// Accuracy = (BackupFileSize / EstimatedSize) * 100
+	var compressionRatio float64
 	var accuracyPct float64
 	var estimatedSizeHuman string
+	var originalDBSizeHuman string
+
+	if totalOriginalSize > 0 && fileSize > 0 {
+		compressionRatio = float64(fileSize) / float64(totalOriginalSize)
+		originalDBSizeHuman = s.formatFileSize(totalOriginalSize)
+	}
+
 	if totalEstimated > 0 && fileSize > 0 {
 		accuracyPct = (float64(fileSize) / float64(totalEstimated)) * 100
 		estimatedSizeHuman = s.formatFileSize(int64(totalEstimated))
@@ -279,14 +283,17 @@ func (s *Service) executeBackupCombined(ctx context.Context, config BackupConfig
 
 	for _, dbName := range dbFiltered {
 		res.successful = append(res.successful, DatabaseBackupInfo{
-			DatabaseName:       dbName,
-			OutputFile:         fullOutputPath,
-			FileSize:           fileSize,
-			FileSizeHuman:      s.formatFileSize(fileSize),
-			EstimatedSize:      totalEstimated,
-			EstimatedSizeHuman: estimatedSizeHuman,
-			AccuracyPercentage: accuracyPct,
-			Duration:           s.formatDuration(backupDuration),
+			DatabaseName:        dbName,
+			OutputFile:          fullOutputPath,
+			FileSize:            fileSize,
+			FileSizeHuman:       s.formatFileSize(fileSize),
+			OriginalDBSize:      totalOriginalSize,
+			OriginalDBSizeHuman: originalDBSizeHuman,
+			CompressionRatio:    compressionRatio,
+			EstimatedSize:       totalEstimated,
+			EstimatedSizeHuman:  estimatedSizeHuman,
+			AccuracyPercentage:  accuracyPct,
+			Duration:            ui.FormatDuration(backupDuration),
 		})
 	}
 

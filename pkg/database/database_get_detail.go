@@ -15,11 +15,11 @@ import (
 
 // GetDatabaseDetails mengambil detail untuk multiple database dari tabel database_details
 // berdasarkan database_name, server_host, dan server_port
-func GetDatabaseDetails(ctx context.Context, databaseNames []string, serverHost string, serverPort int, c *Client) (map[string]structs.DatabaseDetail, error) {
+func (c *Client) GetDatabaseDetails(ctx context.Context, databaseNames []string, serverHost string, serverPort int) (map[string]structs.DatabaseDetail, error) {
 	details := make(map[string]structs.DatabaseDetail)
 
 	for _, dbName := range databaseNames {
-		detail, err := c.GetDatabaseDetail(ctx, dbName, serverHost, serverPort)
+		detail, err := c.GetSingleDatabaseDetail(ctx, dbName, serverHost, serverPort)
 		if err != nil {
 			// Skip database yang tidak ditemukan, lanjutkan ke database berikutnya
 			if err.Error() == fmt.Sprintf("detail database tidak ditemukan untuk database '%s' di server %s:%d", dbName, serverHost, serverPort) {
@@ -39,9 +39,9 @@ func GetDatabaseDetails(ctx context.Context, databaseNames []string, serverHost 
 	return details, nil
 }
 
-// GetDatabaseDetail mengambil detail database dari tabel database_details
+// GetSingleDatabaseDetail mengambil detail database dari tabel database_details
 // berdasarkan database_name, server_host, dan server_port
-func (c *Client) GetDatabaseDetail(ctx context.Context, databaseName, serverHost string, serverPort int) (*structs.DatabaseDetail, error) {
+func (c *Client) GetSingleDatabaseDetail(ctx context.Context, databaseName, serverHost string, serverPort int) (*structs.DatabaseDetail, error) {
 	query := `
 		SELECT 
 			database_name,

@@ -13,7 +13,6 @@ import (
 	// Library eksternal yang matang untuk informasi disk
 	"github.com/shirou/gopsutil/v3/disk"
 	// Library eksternal yang matang untuk format bytes
-	"github.com/dustin/go-humanize"
 )
 
 // DiskSpaceInfo menyimpan informasi ruang disk
@@ -61,20 +60,4 @@ func HasEnoughSpace(path string, requiredBytes uint64, safetyMarginPct float64) 
 	requiredWithMargin := uint64(math.Ceil(float64(requiredBytes) * safetyFactor))
 
 	return diskInfo.Available >= requiredWithMargin, diskInfo, nil
-}
-
-// FormatBytes mengkonversi bytes (uint64) ke format human-readable menggunakan
-// library github.com/dustin/go-humanize.
-func FormatBytes(bytes uint64) string {
-	// humanize.Bytes() menangani konversi menggunakan basis 1024 (KiB, MiB) secara otomatis
-	return humanize.Bytes(bytes)
-}
-
-// FormatBytesInt64 mengkonversi int64 bytes ke format human-readable
-func FormatBytesInt64(bytes int64) string {
-	if bytes < 0 {
-		return "0 B"
-	}
-	// Langsung konversi ke uint64 dan gunakan humanize.Bytes()
-	return humanize.Bytes(uint64(bytes))
 }

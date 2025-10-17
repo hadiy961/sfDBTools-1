@@ -136,15 +136,18 @@ type BackupConfigSummary struct {
 
 // DatabaseBackupInfo berisi informasi database yang berhasil dibackup
 type DatabaseBackupInfo struct {
-	DatabaseName       string                       `json:"database_name"`
-	OutputFile         string                       `json:"output_file"`
-	FileSize           int64                        `json:"file_size_bytes"`      // Ukuran file backup actual
-	FileSizeHuman      string                       `json:"file_size_human"`      // Ukuran file backup actual (human-readable)
-	EstimatedSize      uint64                       `json:"estimated_size_bytes"` // Estimasi ukuran sebelum backup
-	EstimatedSizeHuman string                       `json:"estimated_size_human"` // Estimasi ukuran (human-readable)
-	AccuracyPercentage float64                      `json:"accuracy_percentage"`  // Akurasi estimasi (%)
-	Duration           string                       `json:"duration"`
-	DetailInfo         *database.DatabaseDetailInfo `json:"detail_info,omitempty"` // Informasi detail database
+	DatabaseName        string                       `json:"database_name"`
+	OutputFile          string                       `json:"output_file"`
+	FileSize            int64                        `json:"file_size_bytes"`        // Ukuran file backup actual (compressed)
+	FileSizeHuman       string                       `json:"file_size_human"`        // Ukuran file backup actual (human-readable)
+	OriginalDBSize      int64                        `json:"original_db_size_bytes"` // Ukuran database asli (sebelum backup)
+	OriginalDBSizeHuman string                       `json:"original_db_size_human"` // Ukuran database asli (human-readable)
+	CompressionRatio    float64                      `json:"compression_ratio"`      // Ratio kompresi (backup_size / original_size)
+	EstimatedSize       uint64                       `json:"estimated_size_bytes"`   // Estimasi ukuran sebelum backup
+	EstimatedSizeHuman  string                       `json:"estimated_size_human"`   // Estimasi ukuran (human-readable)
+	AccuracyPercentage  float64                      `json:"accuracy_percentage"`    // Akurasi estimasi (%)
+	Duration            string                       `json:"duration"`
+	DetailInfo          *database.DatabaseDetailInfo `json:"detail_info,omitempty"` // Informasi detail database
 }
 
 // FailedDatabaseInfo berisi informasi database yang gagal dibackup
@@ -171,4 +174,20 @@ type ServerConnectionInfo struct {
 	Database string `json:"database,omitempty"`
 	Config   string `json:"config_name,omitempty"`
 	Version  string `json:"version,omitempty"`
+}
+
+// BackupFileInfo menyimpan informasi ringkas tentang file backup.
+type BackupFileInfo struct {
+	Path    string
+	ModTime time.Time
+	Size    int64
+}
+
+// BackupConfig menyimpan konfigurasi backup yang umum digunakan
+type BackupConfig struct {
+	BaseDumpArgs        string
+	OutputDir           string
+	CompressionType     string
+	CompressionRequired bool
+	EncryptionEnabled   bool
 }

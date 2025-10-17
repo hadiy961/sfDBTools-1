@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sfDBTools/internal/structs"
 	"strconv"
 	"time"
 
@@ -129,4 +130,34 @@ func (c *Client) GetVersion(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("gagal mendapatkan versi database: %w", err)
 	}
 	return version, nil
+}
+
+func (c *Client) GetTargetDBConfig() structs.ServerDBConnection {
+	// Jika konfigurasi target DB sudah ada di ScanOptions, gunakan itu.
+	// Jika tidak, fallback ke environment variables.
+
+	return structs.ServerDBConnection{
+		Host:     GetEnvOrDefault("SFDB_DB_HOST", "localhost"),
+		Port:     GetEnvOrDefaultInt("SFDB_DB_PORT", 3306),
+		User:     GetEnvOrDefault("SFDB_DB_USER", "root"),
+		Password: GetEnvOrDefault("SFDB_DB_PASSWORD", ""),
+		Database: GetEnvOrDefault("SFDB_DB_NAME", ""),
+	}
+}
+
+func (c *Client) ConnectToTargetDB(ctx context.Context) (*Client, error) {
+	targetConn := c.GetTargetDBConfig()
+
+	client, err := InitializeDatabase(targetConn)
+	if err != nil {
+		return nil, fmt.Errorf("gagal koneksi ke target database: %w", err)
+	}
+
+	// Verify koneksi dengan ping
+	if err := c.Ping(ctx); err != nil {
+		client.Close()
+		return nil, fmt.Errorf("gagal verifikasi koneksi: %w", err)
+	}
+
+	return client, nil
 }

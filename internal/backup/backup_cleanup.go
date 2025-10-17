@@ -27,13 +27,6 @@ var (
 	backupExtensions = []string{".sql", ".gz", ".zst", ".lz4", ".enc"}
 )
 
-// BackupFileInfo menyimpan informasi ringkas tentang file backup.
-type BackupFileInfo struct {
-	Path    string
-	ModTime time.Time
-	Size    int64
-}
-
 // CleanupOldBackups menjalankan proses penghapusan semua backup lama di direktori.
 func (s *Service) CleanupOldBackups() error {
 	return s.cleanupCore(false, "") // dryRun=false, tanpa pattern

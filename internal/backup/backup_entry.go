@@ -16,32 +16,32 @@ func (s *Service) ExecuteBackupCommand(config BackupEntryConfig) error {
 	ctx := context.Background()
 
 	// Setup session (koneksi database, filter database, dll)
-	client, dbFiltered, originalMaxStatementsTime, err := s.PrepareBackupSession(ctx, config.HeaderTitle, config.ShowOptions)
+	dbFiltered, originalMaxStatementsTime, err := s.PrepareBackupSession(ctx, config.HeaderTitle, config.ShowOptions)
 	if err != nil {
 		return err
 	}
 	//Pastikan koneksi ditutup di akhir
-	defer client.Close()
+	defer s.Client.Close()
 
 	// Check flag capture GTID jika diaktifkan
 	if config.EnableGTID {
-		if err := s.CaptureGTIDIfNeeded(ctx, client); err != nil {
+		if err := s.CaptureGTIDIfNeeded(ctx, s.Client); err != nil {
 			s.Logger.Warn("Gagal menangani opsi capture GTID: " + err.Error())
-			s.KembalikanMaxStatementsTime(ctx, client, originalMaxStatementsTime)
+			s.KembalikanMaxStatementsTime(ctx, originalMaxStatementsTime)
 			return err
 		}
 	}
 
 	// Lakukan backup dengan mode yang ditentukan
-	if err := s.ExecuteBackup(ctx, client, dbFiltered, config.BackupMode, true); err != nil {
+	if err := s.ExecuteBackup(ctx, dbFiltered, config.BackupMode, true); err != nil {
 		s.Logger.Error(config.LogPrefix + " gagal: " + err.Error())
 		// Kembalikan nilai awal max_statement_time jika ada error
-		s.KembalikanMaxStatementsTime(ctx, client, originalMaxStatementsTime)
+		s.KembalikanMaxStatementsTime(ctx, originalMaxStatementsTime)
 		return err
 	}
 
 	// Kembalikan nilai awal max_statement_time
-	s.KembalikanMaxStatementsTime(ctx, client, originalMaxStatementsTime)
+	s.KembalikanMaxStatementsTime(ctx, originalMaxStatementsTime)
 
 	// Print success message jika ada
 	if config.SuccessMsg != "" {

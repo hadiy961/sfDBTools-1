@@ -10,9 +10,9 @@ import (
 )
 
 // KembalikanMaxStatementsTime mengembalikan nilai max_statements_time saat ini dari sesi database.
-func (s *Service) KembalikanMaxStatementsTime(ctx context.Context, client *database.Client, original float64) {
+func (s *Service) KembalikanMaxStatementsTime(ctx context.Context, original float64) {
 	ui.PrintSubHeader("Mengembalikan nilai max_statement_time")
-	if err := client.SetMaxStatementsTime(ctx, original); err != nil {
+	if err := s.Client.SetMaxStatementsTime(ctx, original); err != nil {
 		s.Logger.Warn("Gagal mengembalikan nilai max_statement_time: " + err.Error())
 	} else {
 		s.Logger.Info("Nilai max_statement_time berhasil dikembalikan ke " + fmt.Sprintf("%f", original))

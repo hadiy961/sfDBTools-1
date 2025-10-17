@@ -10,9 +10,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
-	"sfDBTools/internal/structs"
-	"sfDBTools/pkg/ui" // <-- Menggunakan package UI Anda
+	"path/filepath" // <-- Menggunakan package UI Anda
+	"sfDBTools/pkg/ui"
 	"time"
 
 	"github.com/dustin/go-humanize"
@@ -35,7 +34,6 @@ func (s *Service) CreateBackupSummary(
 	failedDBs []FailedDatabaseInfo,
 	startTime time.Time,
 	errors []string,
-	databaseDetails map[string]structs.DatabaseDetail,
 ) *BackupSummary {
 	endTime := time.Now()
 
@@ -57,7 +55,7 @@ func (s *Service) CreateBackupSummary(
 		Timestamp:           startTime,
 		BackupMode:          backupMode,
 		Status:              status,
-		Duration:            s.formatDuration(endTime.Sub(startTime)),
+		Duration:            ui.FormatDuration(endTime.Sub(startTime)),
 		StartTime:           startTime,
 		EndTime:             endTime,
 		DatabaseStats:       s.buildDatabaseStats(dbFiltered, successfulDBs, failedDBs),
@@ -65,7 +63,7 @@ func (s *Service) CreateBackupSummary(
 		BackupConfig:        s.buildBackupConfigSummary(),
 		SuccessfulDatabases: successfulDBs,
 		FailedDatabases:     failedDBs,
-		DatabaseDetails:     databaseDetails,
+		DatabaseDetails:     s.DatabaseDetail,
 		ServerInfo: ServerConnectionInfo{
 			Host:     s.DBConfigInfo.ServerDBConnection.Host,
 			Port:     s.DBConfigInfo.ServerDBConnection.Port,
@@ -164,216 +162,4 @@ func (s *Service) SaveSummaryToJSON(summary *BackupSummary) error {
 
 	s.Logger.Infof("Summary backup disimpan ke: %s", summaryPath)
 	return nil
-}
-
-// DisplaySummaryTable adalah "controller" yang mengatur tampilan summary.
-func (s *Service) DisplaySummaryTable(summary *BackupSummary) {
-	ui.Headers("BACKUP SUMMARY") // <-- Menggunakan ui.PrintHeader
-
-	s.displayGeneralInfo(summary)
-	s.displayServerInfo(summary)
-	s.displayDBStats(summary)
-	s.displayOutputInfo(summary)
-	s.displayConfig(summary)
-	s.displaySuccessfulDBs(summary)
-	s.displayDatabaseDetails(summary)
-	s.displayFailedDBs(summary)
-	s.displayErrors(summary)
-}
-
-// Masing-masing fungsi di bawah ini sekarang hanya bertanggung jawab untuk SATU tabel.
-
-func (s *Service) displayGeneralInfo(summary *BackupSummary) {
-	ui.PrintSubHeader("Informasi Umum")
-	data := [][]string{
-		{"Backup ID", summary.BackupID},
-		{"Status", ui.GetStatusIcon(summary.Status) + " " + summary.Status}, // <-- Menggunakan ui.GetStatusIcon
-		{"Mode", summary.BackupMode},
-		{"Waktu Mulai", summary.StartTime.Format(displayTimeFormat)},
-		{"Waktu Selesai", summary.EndTime.Format(displayTimeFormat)},
-		{"Durasi", summary.Duration},
-	}
-	ui.FormatTable([]string{"Property", "Value"}, data)
-}
-
-func (s *Service) displayDBStats(summary *BackupSummary) {
-	ui.PrintSubHeader("Statistik Database")
-	data := [][]string{
-		{"Total Database", fmt.Sprintf("%d", summary.DatabaseStats.TotalDatabases)},
-		{"Berhasil", fmt.Sprintf("✅ %d", summary.DatabaseStats.SuccessfulBackups)},
-		{"Gagal", fmt.Sprintf("❌ %d", summary.DatabaseStats.FailedBackups)},
-	}
-	if summary.DatabaseStats.ExcludedDatabases > 0 {
-		data = append(data, []string{"Dikecualikan", fmt.Sprintf("⚠️ %d", summary.DatabaseStats.ExcludedDatabases)})
-	}
-	ui.FormatTable([]string{"Metric", "Count"}, data)
-}
-
-// displayServerInfo menampilkan informasi server database (tanpa password)
-func (s *Service) displayServerInfo(summary *BackupSummary) {
-	// Jika tidak ada info server yang tersedia, lewati
-	if summary.ServerInfo.Host == "" && summary.ServerInfo.User == "" && summary.ServerInfo.Port == 0 {
-		return
-	}
-	ui.PrintSubHeader("Informasi Server")
-	data := [][]string{
-		{"Host", summary.ServerInfo.Host},
-		{"Port", fmt.Sprintf("%d", summary.ServerInfo.Port)},
-		{"User", summary.ServerInfo.User},
-	}
-	if summary.ServerInfo.Database != "" {
-		data = append(data, []string{"Database", summary.ServerInfo.Database})
-	}
-	if summary.ServerInfo.Config != "" {
-		data = append(data, []string{"Config", summary.ServerInfo.Config})
-	}
-	if summary.ServerInfo.Version != "" {
-		data = append(data, []string{"Version", summary.ServerInfo.Version})
-	}
-	ui.FormatTable([]string{"Property", "Value"}, data)
-}
-
-func (s *Service) displayOutputInfo(summary *BackupSummary) {
-	ui.PrintSubHeader("Output Files")
-	data := [][]string{
-		{"Direktori Output", summary.OutputInfo.OutputDirectory},
-		{"Total File", fmt.Sprintf("%d", summary.OutputInfo.TotalFiles)},
-		{"Total Ukuran", summary.OutputInfo.TotalSizeHuman},
-	}
-	ui.FormatTable([]string{"Property", "Value"}, data)
-}
-
-func (s *Service) displayConfig(summary *BackupSummary) {
-	ui.PrintSubHeader("Konfigurasi Backup")
-	var compressionStatus, compressionDetail = "❌ Disabled", "-"
-	if summary.BackupConfig.CompressionEnabled {
-		compressionStatus = "✅ Enabled"
-		compressionDetail = fmt.Sprintf("%s (level: %s)", summary.BackupConfig.CompressionType, summary.BackupConfig.CompressionLevel)
-	}
-	var encryptionStatus, encryptionDetail = "❌ Disabled", "-"
-	if summary.BackupConfig.EncryptionEnabled {
-		encryptionStatus = "✅ Enabled"
-		encryptionDetail = "AES-256-GCM"
-	}
-	var cleanupStatus, cleanupDetail = "❌ Disabled", "-"
-	if summary.BackupConfig.CleanupEnabled {
-		cleanupStatus = "✅ Enabled"
-		cleanupDetail = fmt.Sprintf("%d hari", summary.BackupConfig.RetentionDays)
-	}
-	data := [][]string{
-		{"Kompresi", compressionStatus, compressionDetail},
-		{"Enkripsi", encryptionStatus, encryptionDetail},
-		{"Auto Cleanup", cleanupStatus, cleanupDetail},
-	}
-	ui.FormatTable([]string{"Fitur", "Status", "Detail"}, data)
-}
-
-func (s *Service) displaySuccessfulDBs(summary *BackupSummary) {
-	if len(summary.SuccessfulDatabases) == 0 {
-		return
-	}
-	ui.PrintSubHeader("Database Berhasil")
-
-	// Cek apakah ada estimasi data
-	hasEstimates := false
-	for _, db := range summary.SuccessfulDatabases {
-		if db.EstimatedSize > 0 {
-			hasEstimates = true
-			break
-		}
-	}
-
-	var data [][]string
-	var headers []string
-
-	if hasEstimates {
-		headers = []string{"Database", "File Output", "Estimated", "Actual", "Accuracy", "Durasi"}
-		for _, db := range summary.SuccessfulDatabases {
-			accuracyStr := "-"
-			if db.AccuracyPercentage > 0 {
-				accuracyStr = fmt.Sprintf("%.1f%%", db.AccuracyPercentage)
-			}
-			estimatedStr := db.EstimatedSizeHuman
-			if estimatedStr == "" {
-				estimatedStr = "-"
-			}
-
-			data = append(data, []string{
-				db.DatabaseName,
-				filepath.Base(db.OutputFile),
-				estimatedStr,
-				db.FileSizeHuman,
-				accuracyStr,
-				db.Duration,
-			})
-		}
-	} else {
-		headers = []string{"Database", "File Output", "Ukuran", "Durasi"}
-		for _, db := range summary.SuccessfulDatabases {
-			data = append(data, []string{
-				db.DatabaseName,
-				filepath.Base(db.OutputFile),
-				db.FileSizeHuman,
-				db.Duration,
-			})
-		}
-	}
-
-	ui.FormatTable(headers, data)
-}
-
-func (s *Service) displayDatabaseDetails(summary *BackupSummary) {
-	if len(summary.DatabaseDetails) == 0 {
-		return
-	}
-	ui.PrintSubHeader("Detail Database")
-	var data [][]string
-	for _, db := range summary.SuccessfulDatabases {
-		if detail, exists := summary.DatabaseDetails[db.DatabaseName]; exists {
-			data = append(data, []string{
-				detail.DatabaseName, detail.SizeHuman, fmt.Sprintf("%d", detail.TableCount),
-				fmt.Sprintf("%d", detail.ViewCount), fmt.Sprintf("%d", detail.ProcedureCount),
-				fmt.Sprintf("%d", detail.FunctionCount), fmt.Sprintf("%d", detail.UserGrantCount),
-			})
-		}
-	}
-	if len(data) > 0 {
-		ui.FormatTable([]string{"Database", "DB Size", "Tables", "Views", "Procs", "Funcs", "Users"}, data)
-	}
-}
-
-func (s *Service) displayFailedDBs(summary *BackupSummary) {
-	if len(summary.FailedDatabases) == 0 {
-		return
-	}
-	ui.PrintSubHeader("Database Gagal")
-	var data [][]string
-	for _, db := range summary.FailedDatabases {
-		data = append(data, []string{db.DatabaseName, db.Error})
-	}
-	ui.FormatTable([]string{"Database", "Error"}, data)
-}
-
-func (s *Service) displayErrors(summary *BackupSummary) {
-	if len(summary.Errors) == 0 {
-		return
-	}
-	ui.PrintSubHeader("Error Umum")
-	for _, err := range summary.Errors {
-		ui.PrintColoredLine("   • "+err, ui.ColorYellow)
-	}
-	fmt.Println()
-}
-
-// formatDuration memformat durasi menjadi string yang mudah dibaca.
-// Fungsi ini tetap private karena hanya relevan untuk package ini.
-func (s *Service) formatDuration(duration time.Duration) string {
-	switch {
-	case duration < time.Minute:
-		return fmt.Sprintf("%.1f detik", duration.Seconds())
-	case duration < time.Hour:
-		return fmt.Sprintf("%.1f menit", duration.Minutes())
-	default:
-		return fmt.Sprintf("%.1f jam", duration.Hours())
-	}
 }

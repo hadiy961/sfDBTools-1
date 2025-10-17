@@ -3,14 +3,14 @@
 // Author: Hadiyatna Muflihun
 // Tanggal: 16 Oktober 2025
 
-package fs
+package backup
 
 import (
 	"fmt"
+	"math"
 	"sfDBTools/internal/structs"
 	"sfDBTools/pkg/compress"
 
-	"github.com/dustin/go-humanize"
 	"github.com/shirou/gopsutil/v3/disk"
 )
 
@@ -18,7 +18,7 @@ import (
 const (
 	// sqlDumpMultiplier memperkirakan ukuran SQL dump mentah menjadi ~1.35x lebih besar dari ukuran data biner
 	// karena adanya statement CREATE/INSERT dan formatting teks.
-	sqlDumpMultiplier = 1.35
+	sqlDumpMultiplier = 0.85
 
 	// encryptionOverheadMultiplier menambahkan overhead ~2% untuk header dan padding enkripsi.
 	encryptionOverheadMultiplier = 1.02
@@ -41,81 +41,71 @@ var _ = func() interface{} {
 
 // CheckDiskSpaceForBackup adalah satu-satunya fungsi yang dibutuhkan.
 // Logika estimasi dan pengecekan digabung untuk alur yang lebih linier.
-func CheckDiskSpaceForBackup(
-	outputDir string,
-	dbDetails map[string]structs.DatabaseDetail,
-	dbNames []string,
-	opts structs.EstimateOptions,
-) (*structs.DiskSpaceCheckResult, error) {
+func (s *Service) CheckDiskSpaceForBackup(outputDir string, dbNames []string) error {
 
 	if len(dbNames) == 0 {
-		return nil, fmt.Errorf("tidak ada database yang dipilih untuk diestimasi")
+		return fmt.Errorf("tidak ada database yang dipilih untuk diestimasi")
 	}
 
-	var estimates []structs.BackupSizeEstimate
+	// Pre-allocate estimates slice to avoid repeated allocations when jumlah db diketahui.
+	estimates := make([]structs.BackupSizeEstimate, 0, len(dbNames))
 	var totalEstimatedSize float64 // Gunakan float64 untuk presisi perhitungan
 
 	// --- 1. Mulai Estimasi Ukuran (Logika digabung di sini) ---
 	for _, dbName := range dbNames {
-		detail, exists := dbDetails[dbName]
+		detail, exists := s.DatabaseDetail[dbName]
 		if !exists || detail.SizeBytes <= 0 {
 			continue
 		}
 
 		// Hitung ukuran dump SQL mentah
 		finalSize := float64(detail.SizeBytes) * sqlDumpMultiplier
-		estimatedSQLDumpSize := uint64(finalSize)
+		// ukuran dump SQL mentah dibulatkan ke atas saat disimpan sebagai uint64
+		estimatedSQLDumpSize := uint64(math.Ceil(float64(detail.SizeBytes) * sqlDumpMultiplier))
 
-		// Dapatkan rasio kompresi (logika `getCompressionRatio` di-inline)
-		ratio := 1.0
-		if opts.CompressionEnabled {
-			if levelMap, ok := compress.CompressionRatios[opts.CompressionType]; ok {
-				if r, ok := levelMap[opts.CompressionLevel]; ok {
-					ratio = r
-				} else if r, ok := levelMap[compress.LevelDefault]; ok {
-					ratio = r // Fallback ke level default
-				}
-			} else if opts.CompressionType != compress.CompressionNone {
-				ratio = defaultCompressionRatio // Fallback ke rasio default
-			}
+		// Dapatkan rasio kompresi dengan helper untuk mengurangi cabang nested
+		ratio := s.getCompressionRatio()
+		if s.EstimateOptions.CompressionEnabled {
+			finalSize *= ratio
 		}
-
-		finalSize *= ratio
 
 		// Tambahkan overhead enkripsi
-		if opts.EncryptionEnabled {
+		if s.EstimateOptions.EncryptionEnabled {
 			finalSize *= encryptionOverheadMultiplier
 		}
+
+		// Bulatkan ke atas untuk memastikan kita tidak meremehkan kebutuhan ruang
+		estimatedFinal := uint64(math.Ceil(finalSize))
 
 		estimates = append(estimates, structs.BackupSizeEstimate{
 			DatabaseName:         dbName,
 			OriginalSize:         detail.SizeBytes,
 			EstimatedSQLDumpSize: estimatedSQLDumpSize,
-			EstimatedFinalSize:   uint64(finalSize),
+			EstimatedFinalSize:   estimatedFinal,
 			CompressionRatio:     ratio,
-			CompressionEnabled:   opts.CompressionEnabled,
-			EncryptionEnabled:    opts.EncryptionEnabled,
+			CompressionEnabled:   s.EstimateOptions.CompressionEnabled,
+			EncryptionEnabled:    s.EstimateOptions.EncryptionEnabled,
 		})
-		totalEstimatedSize += finalSize
+		totalEstimatedSize += float64(estimatedFinal)
 	}
 
 	// Tambahkan overhead untuk mode "combined"
-	if opts.BackupMode == "combined" && len(estimates) > 1 {
+	if s.EstimateOptions.BackupMode == "combined" && len(estimates) > 1 {
 		totalEstimatedSize *= combinedBackupOverheadMultiplier
 	}
 
 	// --- 2. Cek Ruang Disk ---
 	usage, err := disk.Usage(outputDir)
 	if err != nil {
-		return nil, fmt.Errorf("gagal memeriksa ruang disk di %s: %w", outputDir, err)
+		return fmt.Errorf("gagal memeriksa ruang disk di %s: %w", outputDir, err)
 	}
 
 	// --- 3. Finalisasi Hasil ---
 	estimatedBackupSize := uint64(totalEstimatedSize)
-	safetyFactor := 1.0 + (opts.SafetyMarginPct / 100.0)
+	safetyFactor := 1.0 + (s.EstimateOptions.SafetyMarginPct / 100.0)
 	requiredWithMargin := uint64(float64(estimatedBackupSize) * safetyFactor)
 
-	result := &structs.DiskSpaceCheckResult{
+	s.DiskSpaceCheckResult = &structs.DiskSpaceCheckResult{
 		OutputDirectory:         outputDir,
 		EstimatedBackupSize:     estimatedBackupSize,
 		RequiredWithMargin:      requiredWithMargin,
@@ -125,42 +115,27 @@ func CheckDiskSpaceForBackup(
 		DatabasesWithoutDetails: len(dbNames) - len(estimates),
 	}
 
-	return result, nil
+	return nil
 }
 
-// GetShortage menghitung kekurangan ruang disk jika tidak cukup.
-func GetShortage(r *structs.DiskSpaceCheckResult) uint64 {
-	if r.HasEnoughSpace || r.AvailableDiskSpace >= r.RequiredWithMargin {
-		return 0
-	}
-	return r.RequiredWithMargin - r.AvailableDiskSpace
-}
-
-// GetSummaryMessage mengembalikan pesan ringkasan yang mudah dibaca.
-func GetSummaryMessage(r *structs.DiskSpaceCheckResult) string {
-	if r.HasEnoughSpace {
-		return fmt.Sprintf(
-			"✓ Ruang disk cukup:\n"+
-				"  Estimasi Ukuran Backup: %s\n"+
-				"  Dibutuhkan (dgn margin): %s\n"+
-				"  Ruang Tersedia: %s\n"+
-				"  Sisa Setelah Backup: %s",
-			humanize.Bytes(r.EstimatedBackupSize),
-			humanize.Bytes(r.RequiredWithMargin),
-			humanize.Bytes(r.AvailableDiskSpace),
-			humanize.Bytes(r.AvailableDiskSpace-r.RequiredWithMargin),
-		)
+// getCompressionRatio mengembalikan rasio kompresi yang berlaku berdasarkan opsi.
+// Nilai yang dikembalikan adalah 1.0 jika kompresi tidak diaktifkan atau tidak ada
+// rasio spesifik tersedia.
+func (s *Service) getCompressionRatio() float64 {
+	if !s.EstimateOptions.CompressionEnabled || s.EstimateOptions.CompressionType == compress.CompressionNone {
+		return 1.0
 	}
 
-	return fmt.Sprintf(
-		"✗ Ruang disk TIDAK cukup:\n"+
-			"  Estimasi Ukuran Backup: %s\n"+
-			"  Dibutuhkan (dgn margin): %s\n"+
-			"  Ruang Tersedia: %s\n"+
-			"  Kekurangan: %s",
-		humanize.Bytes(r.EstimatedBackupSize),
-		humanize.Bytes(r.RequiredWithMargin),
-		humanize.Bytes(r.AvailableDiskSpace),
-		humanize.Bytes(GetShortage(r)),
-	)
+	if levelMap, ok := compress.CompressionRatios[s.EstimateOptions.CompressionType]; ok {
+		if r, ok := levelMap[s.EstimateOptions.CompressionLevel]; ok {
+			return r
+		}
+		if r, ok := levelMap[compress.LevelDefault]; ok {
+			return r
+		}
+	}
+
+	// Fallback ke rasio default ketika tipe kompresi dikenal tapi level tidak ditemukan,
+	// atau ketika tipe kompresi tidak punya entry di map (misalnya plugin eksternal)
+	return defaultCompressionRatio
 }
